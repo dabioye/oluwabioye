@@ -1,0 +1,10 @@
+rules_version = '2';
+// Browsers never talk to Firestore directly: only the Cloud Function (Admin SDK, which bypasses
+// these rules) reads and writes. So lock everything for client SDKs.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
