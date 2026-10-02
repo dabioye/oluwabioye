@@ -1,0 +1,35 @@
+name: Test and deploy to Firebase
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci
+        working-directory: functions
+      - run: npm test
+        working-directory: functions
+      - name: Write non-secret settings for the function
+        run: |
+          echo "BASE_URL=${{ vars.BASE_URL || 'https://sarahanddamilare.dabioye.com' }}" > functions/.env
+          echo "INVITE_URL=${{ vars.INVITE_URL || 'https://oluwabioye.dabioye.com' }}" >> functions/.env
+      - name: Deploy
+        if: env.SA != ''
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          npx --yes firebase-tools@15 deploy --only hosting,functions,firestore --project sarahanddamilare --non-interactive --force

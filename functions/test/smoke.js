@@ -98,6 +98,38 @@ const store = require('../src/store');
   assert((await r.text()).includes('DTSTART:20261217T090000Z'));
   assert((await (await req('/robots.txt')).text()).includes('Disallow: /i/'));
 
+  // Website editor: content + photo upload
+  const png = Buffer.from('ffd8ffe000104a464946', 'hex');
+  r = await req('/api/admin/media', { method: 'POST', headers: { 'Content-Type': 'image/jpeg', cookie: admin }, body: png });
+  const { url } = await r.json();
+  assert.match(url, /^\/media\/[a-f0-9]{20}\.jpg$/);
+  r = await req(url);
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('cache-control'), /immutable/);
+  r = await req('/api/admin/site', json('PUT', { hero: { note: 'Hello <b>guests</b>', photo: url }, registryUrl: 'https://withjoy.com/sd', gallery: [{ src: url, caption: 'Us' }, { src: 'javascript:x' }], story: [{ when: '2019', title: 'We met', text: 'At church' }] }, admin));
+  const site = await r.json();
+  assert.equal(site.gallery.length, 1, 'unsafe URLs dropped');
+  assert.equal((await req('/api/admin/site', json('PUT', {}, gate))).status, 401);
+  await new Promise((ok) => setTimeout(ok, 50));
+  const h = await (await req('/')).text();
+  assert(h.includes('Hello &lt;b&gt;guests&lt;/b&gt;') && h.includes('https://withjoy.com/sd') && h.includes('We met'), 'edits render (escaped)');
+
+  // Two domains
+  process.env.BASE_URL = 'http://public.test';
+  process.env.INVITE_URL = 'http://invite.test';
+  const onInv = (p) => req(p, { headers: { 'X-Forwarded-Host': 'invite.test' } });
+  r = await onInv('/');
+  const land = await r.text();
+  assert(land.includes('Strictly by invitation') && !land.includes('Garden of Peace'), 'invite host front page is private');
+  assert.equal((await onInv('/admin')).status, 404, 'no admin on invite host');
+  assert.equal((await onInv('/i/' + g.code)).status, 200);
+  r = await req('/i/' + g.code, { headers: { 'X-Forwarded-Host': 'public.test' } });
+  assert.equal(r.status, 301);
+  assert.equal(r.headers.get('location'), 'http://invite.test/i/' + g.code);
+  assert((await (await onInv('/robots.txt')).text()).includes('Disallow: /\n'));
+  r = await req('/api/admin/guests', { headers: { cookie: admin, 'X-Forwarded-Host': 'public.test' } });
+  assert((await r.json()).guests[0].link.startsWith('http://invite.test/i/'));
+
   console.log(`✓ all smoke checks passed (store: ${store.kind})`);
   srv.close();
   process.exit(0);

@@ -65,7 +65,7 @@ function jsonBackend() {
   const path = require('path');
   const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data');
   const FILE = path.join(DATA_DIR, 'guests.json');
-  let state = { guests: [], activity: [], publicRsvps: [] };
+  let state = { guests: [], activity: [], publicRsvps: [], settings: {} };
   let queue = Promise.resolve();
   fs.mkdirSync(DATA_DIR, { recursive: true });
   if (fs.existsSync(FILE)) state = { ...state, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) };
@@ -131,6 +131,19 @@ function jsonBackend() {
     },
     async publicRsvps() { return state.publicRsvps.map((r) => ({ ...r })); },
     async removePublicRsvp(id) { state.publicRsvps = state.publicRsvps.filter((r) => r.id !== id); await persist(); return true; },
+
+    async getSettings() { return JSON.parse(JSON.stringify(state.settings || {})); },
+    async saveSettings(obj) { state.settings = obj; await persist(); },
+    async saveMedia(buf, type) {
+      const id = crypto.randomBytes(10).toString('hex') + (type === 'image/png' ? '.png' : type === 'image/webp' ? '.webp' : '.jpg');
+      fs.mkdirSync(path.join(DATA_DIR, 'media'), { recursive: true });
+      fs.writeFileSync(path.join(DATA_DIR, 'media', id), buf);
+      return id;
+    },
+    async readMedia(id) {
+      const f = path.join(DATA_DIR, 'media', path.basename(id));
+      return fs.existsSync(f) ? { buf: fs.readFileSync(f) } : null;
+    },
   };
 }
 
@@ -224,6 +237,21 @@ function firestoreBackend() {
     },
     async publicRsvps() { return (await pub.get()).docs.map((d) => d.data()); },
     async removePublicRsvp(id) { await pub.doc(String(id)).delete(); return true; },
+
+    // Site content edited in /admin/site
+    async getSettings() { return data(await db.collection('settings').doc('site').get()) || {}; },
+    async saveSettings(obj) { await db.collection('settings').doc('site').set(obj); },
+    // Photos live in Firestore (each under 1 MB after in-browser resizing) and are served
+    // through /media/<id> with a long CDN cache, so there is no separate Storage bucket to set up.
+    async saveMedia(buf, type) {
+      const id = crypto.randomBytes(10).toString('hex') + (type === 'image/png' ? '.png' : type === 'image/webp' ? '.webp' : '.jpg');
+      await db.collection('media').doc(id).set({ bytes: buf, type, size: buf.length, at: now() });
+      return id;
+    },
+    async readMedia(id) {
+      const d = data(await db.collection('media').doc(String(id)).get());
+      return d ? { buf: Buffer.from(d.bytes) } : null;
+    },
   };
 }
 

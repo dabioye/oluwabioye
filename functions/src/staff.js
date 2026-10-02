@@ -28,7 +28,7 @@ function adminPage() {
 <div class="adm">
   <header class="adm-top">
     <div class="brand"><img src="/img/seal.jpg" alt=""><div><b>Invitation desk</b><small>${esc(weekday())} ${esc(longDate(cfg.date))} · RSVP by ${esc(longDate(cfg.rsvpBy))}</small></div></div>
-    <nav><a href="/" target="_blank">Website</a><a href="#church">Church RSVPs</a><a href="/checkin" target="_blank">Gate</a><a href="/api/admin/export.csv">Export guests</a><a href="/logout">Sign out</a></nav>
+    <nav><a href="/admin/site">Edit website</a><a href="/" target="_blank">Website</a><a href="#church">Church RSVPs</a><a href="/checkin" target="_blank">Gate</a><a href="/api/admin/export.csv">Export guests</a><a href="/logout">Sign out</a></nav>
   </header>
 
   <h2 style="margin-top:18px">Traditional wedding · private invitations</h2>
@@ -158,4 +158,48 @@ function checkinResultPage({ status, guest, already, code }) {
   });
 }
 
-module.exports = { loginPage, adminPage, checkinPage, checkinResultPage };
+function sitePage() {
+  return layout({
+    title: 'Edit website · Sarah & Damilare',
+    body: `${staffHead}
+<div class="adm site-ed">
+  <header class="adm-top">
+    <div class="brand"><img src="/img/seal.jpg" alt=""><div><b>Edit website</b><small>Changes go live within a few seconds of saving</small></div></div>
+    <nav><a href="/admin">Invitations</a><a href="/" target="_blank">View website</a><a href="/logout">Sign out</a></nav>
+  </header>
+  <form id="siteForm" class="ed-grid">
+    <section class="panel"><h2>Welcome</h2>
+      <div class="ed-photo" data-field="hero.photo" data-label="Couple photo (portrait works best)"></div>
+      <label for="heroNote">Welcome note under your names</label><input id="heroNote" maxlength="300" placeholder="We can’t wait to celebrate with you.">
+    </section>
+    <section class="panel"><h2>Invitation cards</h2>
+      <div class="ed-two">
+        <div class="ed-photo" data-field="invitationArt.church" data-label="Church invitation (public site)"></div>
+        <div class="ed-photo" data-field="invitationArt.trad" data-label="Traditional invitation (leave the guest-name space empty: each guest’s name is added automatically)"></div>
+      </div>
+    </section>
+    <section class="panel"><h2>Our story</h2><div id="story" class="ed-list"></div><button type="button" class="abtn" id="addStory">Add a moment</button></section>
+    <section class="panel"><h2>Gallery</h2>
+      <div id="gallery" class="ed-gallery"></div>
+      <label class="abtn primary ed-upload" for="galleryFiles">Add photos</label><input id="galleryFiles" type="file" accept="image/*" multiple hidden>
+      <p class="small">Photos are resized on your phone before upload, so large camera photos are fine.</p>
+    </section>
+    <section class="panel"><h2>Registry &amp; RSVP</h2>
+      <label for="registryUrl">Joy registry link</label><input id="registryUrl" type="url" placeholder="https://withjoy.com/…">
+      <label for="giftsMessage">Registry message</label><textarea id="giftsMessage" rows="2" maxlength="500"></textarea>
+      <label for="rsvpBy">RSVP deadline</label><input id="rsvpBy" type="date">
+      <label for="publicNotes">Notes for church guests (one per line)</label><textarea id="publicNotes" rows="3"></textarea>
+      <fieldset><legend>Opening animation</legend>
+        <label class="chk"><input type="checkbox" id="introHome"> Wax-seal opening on the public site</label>
+        <label class="chk"><input type="checkbox" id="introInvite"> Wax-seal opening on private invitations</label>
+      </fieldset>
+    </section>
+  </form>
+  <div class="ed-save"><span id="dirty" class="small"></span><button type="button" class="abtn primary" id="saveBtn">Save changes</button></div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>`,
+    script: '<script src="/js/admin-site.js" defer></script>',
+  });
+}
+
+module.exports = { sitePage, loginPage, adminPage, checkinPage, checkinResultPage };

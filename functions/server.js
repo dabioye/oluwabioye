@@ -5,13 +5,18 @@ const QRCode = require('qrcode');
 
 const cfg = require('./src/config');
 const store = require('./src/store');
+const content = require('./src/content');
 const pages = require('./src/pages');
-const { adminPage, loginPage, checkinPage, checkinResultPage } = require('./src/staff');
+const { adminPage, sitePage, loginPage, checkinPage, checkinResultPage } = require('./src/staff');
 const { parseCsv, toCsv } = require('./src/csv');
 
 const PORT = process.env.PORT || 3000;
 const env = (k) => process.env[k] || '';
 const BASE_URL = () => (env('BASE_URL') || `http://localhost:${PORT}`).replace(/\/$/, '');
+// Private traditional-wedding site (e.g. https://oluwabioye.dabioye.com). Falls back to BASE_URL.
+const INVITE_URL = () => (env('INVITE_URL') || BASE_URL()).replace(/\/$/, '');
+const hostOf = (u) => { try { return new URL(u).hostname; } catch { return ''; } };
+const onInviteHost = (req) => !!env('INVITE_URL') && req.hostname === hostOf(INVITE_URL()) && hostOf(INVITE_URL()) !== hostOf(BASE_URL());
 // Read secrets lazily: on Firebase they are injected at request time.
 let devSecret;
 const SECRET = () => env('SESSION_SECRET') || (devSecret ||= crypto.randomBytes(32).toString('hex'));
@@ -33,6 +38,34 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: '1h' }));
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+// Uploaded photos. Ids are random and never reused, so the CDN can cache them for a year.
+app.get('/media/:id', wrap(async (req, res) => {
+  const id = String(req.params.id);
+  if (!/^[a-f0-9]{20}\.(jpg|png|webp)$/.test(id)) return res.sendStatus(404);
+  const m = await store.readMedia(id);
+  if (!m) return res.sendStatus(404);
+  res.set('Cache-Control', 'public, max-age=31536000, immutable').type(id.split('.').pop()).send(m.buf);
+}));
+
+// Load editable site content (admin-edited text and photos) before rendering any page.
+app.use(wrap(async (req, res, next) => { await content.apply(); next(); }));
+
+// Two front doors, one app:
+//  - public site (BASE_URL): church wedding, RSVP, admin
+//  - invite site (INVITE_URL): only personal invitations, access-card QR and the gate
+app.use((req, res, next) => {
+  if (!env('INVITE_URL') || hostOf(INVITE_URL()) === hostOf(BASE_URL())) return next();
+  const p = req.path;
+  const inviteOnly = /^\/(i|c)\//.test(p);
+  if (onInviteHost(req)) {
+    if (p === '/robots.txt') return res.type('text/plain').send('User-agent: *\nDisallow: /\n');
+    if (inviteOnly || p.startsWith('/checkin') || p.startsWith('/api/checkin') || p === '/logout') return next();
+    return res.status(p === '/' ? 200 : 404).send(pages.privateLanding());
+  }
+  if (inviteOnly) return res.redirect(301, INVITE_URL() + req.originalUrl);
+  next();
+});
 
 // ---------- sessions ----------
 // Firebase Hosting strips every cookie except one named "__session", so that's the name we use.
@@ -75,16 +108,16 @@ function limit(max, windowMs) {
 const safeEq = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a)).digest(), crypto.createHash('sha256').update(String(b)).digest());
 
 // ---------- helpers ----------
-const inviteLink = (g) => `${BASE_URL()}/i/${g.code}`;
+const inviteLink = (g) => `${INVITE_URL()}/i/${g.code}`;
 const qrSvg = (text) => QRCode.toString(text, { type: 'svg', margin: 0, errorCorrectionLevel: 'M', color: { dark: '#0f1a2e', light: '#f5eee2' } });
 const message = (g) =>
   cfg.inviteMessage.replaceAll('{name}', g.name).replaceAll('{link}', inviteLink(g)).replaceAll('{weekday}', pages.weekday()).replaceAll('{rsvpBy}', pages.longDate(cfg.rsvpBy));
 const publicGuest = (g) => ({ ...g, link: inviteLink(g), message: message(g) });
 
 // ---------- public: church wedding ----------
-app.get('/', (req, res) => res.set('Cache-Control', 'public, max-age=60').send(pages.home()));
-app.get('/invitation', (req, res) => res.set('Cache-Control', 'public, max-age=300').send(pages.invitationPage()));
-app.get('/our-story', (req, res) => res.set('Cache-Control', 'public, max-age=300').send(pages.storyPage()));
+app.get('/', (req, res) => res.send(pages.home()));
+app.get('/invitation', (req, res) => res.send(pages.invitationPage()));
+app.get('/our-story', (req, res) => res.send(pages.storyPage()));
 
 app.post('/rsvp', limit(10, 60_000), wrap(async (req, res) => {
   if (cfg.churchRsvp.open === false) return res.redirect(303, '/');
@@ -104,7 +137,7 @@ app.get('/i/:code', limit(60, 60_000), wrap(async (req, res) => {
   let g = await store.byCode(req.params.code);
   if (!g) return res.status(404).send(pages.simple('Invitation not found', 'This link doesn’t match an invitation. Please check the link you received, or contact Busayo or Hope.'));
   if (!isStaff(req)) g = (await store.markOpened(g)) || g;
-  res.send(pages.invite({ guest: g, qrSvg: await qrSvg(`${BASE_URL()}/c/${g.code}`), justSaved: req.query.saved === '1' }));
+  res.send(pages.invite({ guest: g, qrSvg: await qrSvg(`${INVITE_URL()}/c/${g.code}`), justSaved: req.query.saved === '1' }));
 }));
 
 app.post('/i/:code/rsvp', limit(20, 60_000), wrap(async (req, res) => {
@@ -153,6 +186,7 @@ app.get('/logout', (req, res) => {
   res.redirect('/');
 });
 app.get('/admin', needAdmin, (req, res) => res.send(adminPage()));
+app.get('/admin/site', needAdmin, (req, res) => res.send(sitePage()));
 
 const api = express.Router();
 api.use(needAdmin);
@@ -216,7 +250,14 @@ api.delete('/church/:id', wrap(async (req, res) => res.json({ ok: await store.re
 api.get('/qr/:id.svg', wrap(async (req, res) => {
   const g = await store.byId(req.params.id);
   if (!g) return res.sendStatus(404);
-  res.type('image/svg+xml').send(await qrSvg(`${BASE_URL()}/c/${g.code}`));
+  res.type('image/svg+xml').send(await qrSvg(`${INVITE_URL()}/c/${g.code}`));
+}));
+api.get('/site', wrap(async (req, res) => res.json(await content.current())));
+api.put('/site', wrap(async (req, res) => res.json(await content.save(req.body))));
+api.post('/media', express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: '1mb' }), wrap(async (req, res) => {
+  if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'Send a JPEG, PNG or WebP image under 1 MB.' });
+  const id = await store.saveMedia(req.body, req.get('content-type'));
+  res.json({ url: '/media/' + id });
 }));
 app.use('/api/admin', api);
 

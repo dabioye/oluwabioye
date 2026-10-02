@@ -7,35 +7,56 @@
 | `/admin` | You two + planners | Invitation desk: traditional guest list, WhatsApp sending, sent → opened → RSVP → arrived tracking, CSV import/export, **church RSVP list** with headcount and export. |
 | `/checkin` | Ushers | Gate check-in for the traditional wedding: scan QR or search name. Ushers can't see the guest list. |
 
-## Hosting on Firebase
+## Two domains
 
-Firebase Hosting serves `public/` and forwards everything else to one Cloud Function (`functions/`) running the Express app. Data lives in Firestore.
+| Domain | Shows |
+| --- | --- |
+| `sarahanddamilare.dabioye.com` (`BASE_URL`) | Public church-wedding site, church RSVP, `/admin` |
+| `oluwabioye.dabioye.com` (`INVITE_URL`) | Only personal invitations `/i/CODE`, access-card QR `/c/CODE` and the gate `/checkin`. Its front page just says "strictly by invitation". |
 
-**Plan:** Cloud Functions needs the **Blaze (pay-as-you-go)** plan. At wedding-site traffic you'll stay inside the free allowance (about 2 million function calls a month and 50,000 Firestore reads a day are free), so expect ₦0 or a few cents. The admin page refreshes every minute while open, and each refresh reads every guest, so close the tab when you are done. Set a budget alert of $1 to be safe.
+One Firebase Hosting site serves both: the app looks at the domain of each request. Invitation links on the public domain redirect to the invite domain. If `INVITE_URL` is not set, everything runs on one domain (handy for `*.web.app` and local dev).
 
-### One-time setup
+## Hosting on Firebase (project `sarahanddamilare`, Blaze plan)
+
+One-time setup:
 
 ```bash
-npm i -g firebase-tools
-firebase login
-# In the Firebase console: create a project, upgrade to Blaze, create a Firestore database (europe-west1 recommended).
-cd wedding-site
-# put your project id in .firebaserc
-cd functions && npm install && cp .env.example .env && cd ..
-firebase functions:secrets:set ADMIN_PASSWORD     # for /admin
-firebase functions:secrets:set CHECKIN_PIN        # for ushers at /checkin
+npm i -g firebase-tools && firebase login
+cd functions && npm ci && cp .env.example .env && cd ..
+firebase functions:secrets:set ADMIN_PASSWORD     # /admin
+firebase functions:secrets:set CHECKIN_PIN        # ushers at /checkin
 firebase functions:secrets:set SESSION_SECRET     # any long random string
 firebase deploy --only hosting,functions,firestore
 ```
 
-### Custom domain
+Custom domains: Firebase console → Hosting → **Add custom domain**, once for `sarahanddamilare.dabioye.com` and once for `oluwabioye.dabioye.com`. Add the DNS records it shows at your DNS provider. SSL is issued automatically, usually within an hour (up to 24 h).
 
-Firebase console → Hosting → **Add custom domain** → `sarahanddamilare.dabioye.com`. Add the records it shows at your DNS provider for dabioye.com. The SSL certificate is issued automatically (can take up to 24 h). Make sure `BASE_URL` in `functions/.env` matches, then redeploy functions.
+### Auto-deploy from GitHub (optional)
 
-### Notes
+`.github/workflows/deploy.yml` runs the tests on every push to `main` and deploys if the repo has a `FIREBASE_SERVICE_ACCOUNT` secret:
+
+1. Google Cloud console → IAM → Service accounts → create `github-deploy` with roles **Firebase Admin**, **Cloud Functions Admin**, **Cloud Run Admin**, **Service Account User**, **Secret Manager Viewer**, **Artifact Registry Administrator**.
+2. Create a JSON key for it and paste the whole JSON into GitHub → repo Settings → Secrets and variables → Actions → **New repository secret** `FIREBASE_SERVICE_ACCOUNT`.
+3. Optional repo variables `BASE_URL` / `INVITE_URL` override the two domains.
+
+Without the secret, the workflow still runs the tests and skips the deploy.
+
+### Cost and notes
+- Blaze is required for Cloud Functions. At this traffic it stays in the free allowance; set a $1 budget alert.
+- Photos uploaded in the admin are stored in Firestore (resized in the browser to under 1 MB) and served from `/media/…` with a one-year CDN cache. No Storage bucket is needed.
 - The session cookie is named `__session` because Firebase Hosting drops all other cookies.
-- Firestore rules deny all browser access; only the function (Admin SDK) reads and writes.
-- Backups: Firestore console → Import/Export, or just use **Export guests** and **Church RSVPs → Export** in `/admin` before the day.
+- Firestore rules deny all browser access; only the function reads and writes.
+
+## Editing the website without code
+
+Sign in at `/admin` → **Edit website**. From your phone you can:
+- upload the couple photo, gallery photos and story photos (resized automatically)
+- replace the church and traditional invitation cards
+- write Our Story (moments with dates, text and photos; reorder or delete)
+- set the Joy registry link and message, RSVP deadline, notes for church guests
+- turn the wax-seal opening on or off
+
+Changes go live within about 15 seconds. `functions/src/config.js` still holds the fixed details (names, venues, times) and the defaults.
 
 ## Local development
 
@@ -54,14 +75,9 @@ The app also still runs on any plain Node host (`STORE=json node server.js`).
 
 Everything is in `functions/src/config.js`: families, events, venues, map links, RSVP date, contacts, story, **registryUrl** (your withjoy.com link), public notes, guest notes for the private invite, and the WhatsApp message. The weekday is calculated from `date`.
 
-## Photos, story and the opening
+## Invitation card name slot
 
-- **Couple photo:** save a portrait photo as `public/img/couple.jpg` (at least 1200px tall) and set `hero.photo: '/img/couple.jpg'` in config. Add a short `hero.note`.
-- **Gallery:** drop photos into `public/img/gallery/` and list them in `gallery`. The first photo shows large.
-- **Our Story:** edit the four `story` milestones. Each can have an optional `photo` from `public/img/story/`.
-- **Invitation cards:** `public/img/invite-church.jpg` and `invite-trad.jpg` were cut from your design. The trad card has the sample name removed, and each guest's name is set into it. Replace them with full-resolution exports when you have them. If the name position shifts, adjust `invitationArt.nameSlot`.
-- **Wax-seal opening:** shown once per visit on the homepage and on private invites. Switch either off in `intro`.
-- Compress photos before adding them (about 300 KB each). Firebase Hosting serves them from its CDN.
+On private invitations each guest's name is written into the traditional card. If you upload a new card design, leave that space empty; adjust `invitationArt.nameSlot` in `config.js` if the name sits too high or low.
 
 ## Sending traditional invitations
 

@@ -414,4 +414,20 @@ function invitationPage() {
   return layout({ title: `Wedding Invitation · ${c.bride} & ${c.groom}`, description: `Invitation to the wedding ceremony of ${c.brideFull} and ${c.groomFull}, ${longDate(cfg.date)} at ${ev.address}.`, body, noindex: false, bodyClass: 'invitation-page-body' });
 }
 
-module.exports = { layout, home, invite, invitationPage, storyPage, simple, esc, weekday, longDate, mono, rule, FONTS };
+// Front page of the invite-only site. Reveals nothing about the event to people without a link.
+function privateLanding() {
+  const c = cfg.couple;
+  return layout({
+    title: `The Making of ${c.surname}`,
+    description: 'Strictly by invitation.',
+    body: `<main class="wrap"><section class="frame center" style="margin-top:clamp(40px,12vh,120px)">
+      ${mono}${rule}
+      <div class="eyebrow">Strictly by invitation</div>
+      <h1 class="display l" style="margin-top:10px">The Making of ${esc(c.surname)}</h1>
+      <p class="lede" style="margin-top:14px">This celebration is private. Please open the personal invitation link that was sent to you.</p>
+      <p class="lede">Can’t find your link? ${cfg.contacts.map((p) => `${esc(p.name)} <a href="${waHref(p.phone)}" target="_blank" rel="noopener">${esc(p.phone)}</a>`).join(' or ')}</p>
+    </section></main>`,
+  });
+}
+
+module.exports = { privateLanding, layout, home, invite, invitationPage, storyPage, simple, esc, weekday, longDate, mono, rule, FONTS };
