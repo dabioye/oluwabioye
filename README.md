@@ -18,28 +18,59 @@ One Firebase Hosting site serves both: the app looks at the domain of each reque
 
 ## Hosting on Firebase (project `sarahanddamilare`, Blaze plan)
 
-One-time setup:
+Day to day you don't deploy by hand: **every push to `main` is tested and deployed by GitHub Actions** (see below). You can also start a deploy from GitHub → Actions → "Test and deploy to Firebase" → **Run workflow**.
+
+### Secrets (already set; change them like this)
+
+The site reads three secrets from Secret Manager. To change one (for example the admin password), run it from a computer logged in with `firebase login`, then redeploy:
 
 ```bash
-npm i -g firebase-tools && firebase login
-cd functions && npm ci && cp .env.example .env && cd ..
-firebase functions:secrets:set ADMIN_PASSWORD     # /admin
-firebase functions:secrets:set CHECKIN_PIN        # ushers at /checkin
-firebase functions:secrets:set SESSION_SECRET     # any long random string
-firebase deploy --only hosting,functions,firestore
+firebase functions:secrets:set ADMIN_PASSWORD --project sarahanddamilare   # /admin
+firebase functions:secrets:set CHECKIN_PIN    --project sarahanddamilare   # ushers at /checkin
+firebase functions:secrets:set SESSION_SECRET --project sarahanddamilare   # any long random string
+firebase functions:secrets:access ADMIN_PASSWORD --project sarahanddamilare  # show the current value
 ```
 
-Custom domains: Firebase console → Hosting → **Add custom domain**, once for `sarahanddamilare.dabioye.com` and once for `oluwabioye.dabioye.com`. Add the DNS records it shows at your DNS provider. SSL is issued automatically, usually within an hour (up to 24 h).
+Or in the browser: Google Cloud console → Security → **Secret Manager** → pick the secret → **New version**, then re-run the GitHub workflow.
 
-### Auto-deploy from GitHub (optional)
+### Custom domains (DNS at Namecheap)
 
-`.github/workflows/deploy.yml` runs the tests on every push to `main` and deploys if the repo has a `FIREBASE_SERVICE_ACCOUNT` secret:
+Firebase console → Hosting → **Add custom domain**, once for `sarahanddamilare.dabioye.com` and once for `oluwabioye.dabioye.com`. Both go on the same Hosting site; the app picks the public or invite-only pages from the domain.
 
-1. Google Cloud console → IAM → Service accounts → create `github-deploy` with roles **Firebase Admin**, **Cloud Functions Admin**, **Cloud Run Admin**, **Service Account User**, **Secret Manager Viewer**, **Artifact Registry Administrator**.
-2. Create a JSON key for it and paste the whole JSON into GitHub → repo Settings → Secrets and variables → Actions → **New repository secret** `FIREBASE_SERVICE_ACCOUNT`.
-3. Optional repo variables `BASE_URL` / `INVITE_URL` override the two domains.
+In Namecheap → Domain List → `dabioye.com` → **Manage** → **Advanced DNS**, add the records Firebase shows (usually an **A** record and a **TXT** record per subdomain, sometimes an `_acme-challenge` record). In the **Host** field type only the part before the domain (`sarahanddamilare`, `oluwabioye`, `_acme-challenge.oluwabioye`), not the full name. Delete any old record for the same host first. Back in Firebase click **Verify**; SSL is issued automatically, usually within an hour (up to 24 h).
+
+### Auto-deploy from GitHub
+
+`.github/workflows/deploy.yml` runs the tests on every push to `main` and deploys when the repo has a `FIREBASE_SERVICE_ACCOUNT` secret (it does). To set it up again, e.g. for a new project:
+
+1. Google Cloud console → IAM & Admin → **Service accounts** → create `github-deploy` with these roles:
+   **Firebase Admin**, **Cloud Functions Admin**, **Cloud Run Admin**, **Service Account User**, **Secret Manager Admin**, **Artifact Registry Administrator**, **Service Usage Consumer**.
+2. As a project owner, enable the **Cloud Billing API** once (the deploy account may not enable it itself):
+   https://console.cloud.google.com/apis/library/cloudbilling.googleapis.com?project=sarahanddamilare
+3. Service account → **Keys** → Add key → JSON. Paste the whole file into GitHub → repo Settings → Secrets and variables → Actions → **New repository secret** `FIREBASE_SERVICE_ACCOUNT`. Then delete the downloaded file.
+4. Optional repo variables `BASE_URL` / `INVITE_URL` override the two domains.
 
 Without the secret, the workflow still runs the tests and skips the deploy.
+
+### Deploying from your own computer (fallback)
+
+Needs **Node 22** (the Firebase CLI loads the code with your local Node; Node 20 fails with `ERR_REQUIRE_ESM`) and **firebase-tools 15**:
+
+```bash
+# Node 22 via nvm (works on Intel and Apple Silicon Macs)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash   # then open a new terminal
+nvm install 22
+npm install -g firebase-tools@15
+firebase login --reauth
+
+cd functions && npm ci && cp .env.example .env && cd ..
+firebase deploy --only hosting,functions,firestore --project sarahanddamilare
+```
+
+Troubleshooting:
+- `Authentication Error` → `firebase login --reauth`.
+- `An unexpected error has occurred` → look at the end of `firebase-debug.log`. `ConnectTimeoutError` there means a slow or filtered network: try `export NODE_OPTIONS="--dns-result-order=ipv4first --network-family-autoselection-attempt-timeout=2000"`, another network, or just run the GitHub workflow instead.
+- `Permissions denied enabling <service>` → open the link it prints as a project owner and click **Enable**.
 
 ### Cost and notes
 - Blaze is required for Cloud Functions. At this traffic it stays in the free allowance; set a $1 budget alert.
