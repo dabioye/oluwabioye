@@ -23,8 +23,8 @@ const sprig = (cls) => `<svg class="sprig ${cls}" viewBox="0 0 200 200" aria-hid
   ${[[140, 128], [146, 138], [134, 140]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="3" fill="#d2b07a"/>`).join('')}
 </svg>`;
 
-const mono = `<img class="mono" src="/img/monogram-gold.png" alt="Sarah and Damilare’s intertwined monogram" width="160" height="132">`;
-const monoNavy = `<img class="mono" src="/img/monogram-navy.png" alt="Sarah and Damilare’s intertwined monogram" width="160" height="132">`;
+const mono = `<img class="mono" src="/img/monogram-gold.png" alt="Sarah and Damilare’s intertwined monogram" width="160" height="154">`;
+const monoNavy = `<img class="mono" src="/img/monogram-navy.png" alt="Sarah and Damilare’s intertwined monogram" width="160" height="154">`;
 const rule = `<div class="rule" aria-hidden="true"><span>✦</span></div>`;
 
 // Line icons for the bottom bar

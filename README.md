@@ -2,16 +2,16 @@
 
 | URL | Who | What |
 | --- | --- | --- |
-| `/` | **Public** | Church wedding website: 10 AM ceremony at RCCG Garden of Peace, directions, add-to-calendar, story, colours, open **church RSVP**, link to your **Joy gift registry**, contacts. No traditional-wedding details appear here. |
+| `/` | **Public** | Church wedding website: 10 AM ceremony at RCCG Garden of Peace, directions, add-to-calendar, story, colours, link to your **Joy gift registry**, contacts. No traditional-wedding details and no RSVP appear here. |
 | `/i/CODE` | **Private**, only people you send a link to | Traditional wedding & reception invitation with the guest's name, RSVP, QR **access card** and **driver meal card**. Not linked anywhere, `noindex`, blocked in `robots.txt`, unguessable 6-character codes. |
-| `/admin` | You two + planners | Invitation desk: traditional guest list, WhatsApp sending, sent → opened → RSVP → arrived tracking, CSV import/export, **church RSVP list** with headcount and export. |
+| `/admin` | You two + planners | Invitation desk: traditional guest list, WhatsApp sending, sent → opened → RSVP → arrived tracking, CSV import/export. (The church RSVP list stays empty while the public RSVP is off: `churchRsvp.open` in `config.js`.) |
 | `/checkin` | Ushers | Gate check-in for the traditional wedding: scan QR or search name. Ushers can't see the guest list. |
 
 ## Two domains
 
 | Domain | Shows |
 | --- | --- |
-| `sarahanddamilare.dabioye.com` (`BASE_URL`) | Public church-wedding site, church RSVP, `/admin` |
+| `sarahanddamilare.dabioye.com` (`BASE_URL`) | Public church-wedding site (no RSVP), `/admin` |
 | `oluwabioye.dabioye.com` (`INVITE_URL`) | Only personal invitations `/i/CODE`, access-card QR `/c/CODE` and the gate `/checkin`. Its front page just says "strictly by invitation". |
 
 One Firebase Hosting site serves both: the app looks at the domain of each request. Invitation links on the public domain redirect to the invite domain. If `INVITE_URL` is not set, everything runs on one domain (handy for `*.web.app` and local dev).
@@ -53,7 +53,7 @@ Sign in at `/admin` → **Edit website**. From your phone you can:
 - upload the couple photo, gallery photos and story photos (resized automatically)
 - replace the church and traditional invitation cards
 - write Our Story (moments with dates, text and photos; reorder or delete)
-- set the Joy registry link and message, RSVP deadline, notes for church guests
+- set the Joy registry link and message, RSVP deadline (shown on private invitations), notes for church guests
 - turn the wax-seal opening on or off
 
 Changes go live within about 15 seconds. `functions/src/config.js` still holds the fixed details (names, venues, times) and the defaults.

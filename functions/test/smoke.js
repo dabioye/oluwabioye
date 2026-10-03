@@ -31,19 +31,12 @@ const store = require('../src/store');
   assert(!home.includes('/find'), 'no invitation-code lookup on public page');
   assert.equal((await req('/find?code=AAAAAA')).status, 404);
 
-  // Public church RSVP + update by phone
+  // RSVP lives only on private invitations: none on the public site
+  assert(!/rsvp/i.test(home), 'no RSVP on public homepage');
+  assert(!/rsvp/i.test(await (await req('/invitation')).text()), 'no RSVP on public invitation page');
   r = await req('/rsvp', form({ name: 'Bisi Ade', phone: '0803 111 2222', attending: 'yes', party: '3' }));
-  assert.equal(r.status, 200);
-  assert((await r.text()).includes('saved your place'));
-  r = await req('/rsvp', form({ name: 'Bisi Ade', phone: '+234 803 111 2222', attending: 'yes', party: '2' }));
-  assert((await r.text()).includes('earlier reply was updated'));
-  r = await req('/rsvp', form({ name: '', phone: '' }));
-  assert.equal(r.status, 400);
-  r = await req('/rsvp', form({ name: 'Bot', phone: '1', website: 'spam' }));
-  assert.equal(r.status, 200);
-  const church = await store.publicRsvps();
-  assert.equal(church.length, 1, 'deduped by phone, bot ignored');
-  assert.equal(church[0].party, 2);
+  assert.equal(r.status, 303);
+  assert.equal((await store.publicRsvps()).length, 0, 'public RSVP is closed');
 
   // Admin
   assert.equal((await req('/admin')).status, 302);
@@ -88,12 +81,10 @@ const store = require('../src/store');
   const d = await r.json();
   const t = d.guests.find((x) => x.code === g.code);
   assert(t.openedAt && t.openCount === 2 && t.checkedInAt && t.rsvp === 'yes');
-  assert.equal(d.church.length, 1);
-  assert(d.activity.some((a) => a.type === 'church'));
+  assert.equal(d.church.length, 0);
   r = await req('/api/admin/export.csv', { headers: { cookie: admin } });
   assert((await r.text()).includes('Ade, Jnr'));
-  r = await req('/api/admin/church.csv', { headers: { cookie: admin } });
-  assert((await r.text()).includes('Bisi Ade'));
+  assert.equal((await req('/api/admin/church.csv', { headers: { cookie: admin } })).status, 200);
   r = await req('/calendar/church.ics');
   assert((await r.text()).includes('DTSTART:20261217T090000Z'));
   assert((await (await req('/robots.txt')).text()).includes('Disallow: /i/'));

@@ -60,8 +60,9 @@ module.exports = {
     // e.g. 'Please be seated by 9:45 AM.'
   ],
 
-  // Public RSVP for the church wedding. Set open: false to close it.
-  churchRsvp: { open: true, maxParty: 6 },
+  // Public RSVP for the church wedding. Off: RSVPs are only taken on private invitations (/i/CODE).
+  // Set open: true to bring the RSVP form back on the public site.
+  churchRsvp: { open: false, maxParty: 6 },
 
   // Gift registry on withjoy.com. Paste your registry link here.
   registryUrl: '',
