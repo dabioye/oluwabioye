@@ -141,15 +141,17 @@ test('ushers check guests in at the gate', async ({ page, request }) => {
   await expect(page.getByText('Already checked in')).toBeVisible();
 });
 
-test('sending on WhatsApp from a phone shares the personalised card with the message', async ({ page, request }) => {
+test('sending on WhatsApp from a phone opens the guest’s chat with the message, then shares the card', async ({ page, request }) => {
   const g = await addGuest(request, { name: 'Funke Bello', phone: '08066666666' });
-  // Stand-in for the phone's share sheet: record what would go to WhatsApp.
+  // Stand-ins for WhatsApp and the phone's share sheet: record what would be sent.
   await page.addInitScript(() => {
-    const w = window as unknown as { shared: unknown[] };
+    const w = window as unknown as { opened: string[]; shared: unknown[] };
+    w.opened = [];
     w.shared = [];
+    window.open = (url?: string | URL) => (w.opened.push(String(url)), null);
     Object.assign(navigator, {
       canShare: () => true,
-      share: async (d: { files: File[]; text: string }) => {
+      share: async (d: { files: File[]; text?: string }) => {
         w.shared.push({ text: d.text, files: d.files.map((f) => ({ name: f.name, type: f.type, size: f.size })) });
       },
     });
@@ -163,9 +165,20 @@ test('sending on WhatsApp from a phone shares the personalised card with the mes
     .last();
   await row.getByRole('button', { name: /Send · WhatsApp/ }).click();
   await expect(page.getByText('Marked as sent to Funke Bello')).toBeVisible();
-  const shared = await page.evaluate(() => (window as unknown as { shared: { text: string; files: { name: string; type: string; size: number }[] }[] }).shared);
+  const opened = await page.evaluate(() => (window as unknown as { opened: string[] }).opened);
+  expect(opened).toHaveLength(1);
+  expect(opened[0]).toMatch(/^https:\/\/wa\.me\/2348066666666\?text=/);
+  expect(decodeURIComponent(opened[0])).toContain(`/i/${g.code}`);
+
+  const dialog = page.getByRole('dialog', { name: /Now send Funke’s card/ });
+  await expect(dialog.getByRole('img', { name: 'Invitation card for Funke Bello' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Share card' }).click();
+  await expect(dialog).toBeHidden();
+  const shared = await page.evaluate(
+    () => (window as unknown as { shared: { text?: string; files: { name: string; type: string; size: number }[] }[] }).shared,
+  );
   expect(shared).toHaveLength(1);
-  expect(shared[0].text).toContain(`/i/${g.code}`);
+  expect(shared[0].text).toBeUndefined();
   expect(shared[0].files[0]).toMatchObject({ name: 'Invitation - Funke Bello.jpg', type: 'image/jpeg' });
   expect(shared[0].files[0].size).toBeGreaterThan(50_000);
 });

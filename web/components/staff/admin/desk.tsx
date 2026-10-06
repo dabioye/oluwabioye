@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { StaffHeader, StaffPage } from '../staff-shell';
 import { GuestDialog } from './guest-dialog';
 import { ImportDialog } from './import-dialog';
+import { SendCardDialog } from './send-card-dialog';
 import { activityText, CHANNEL_LABEL, PILL, sendHref, type Stage, STAGES, stageOf } from './model';
 
 type Data = { guests: Guest[]; activity: Activity[]; church: ChurchRsvp[]; inviteUrl: string };
@@ -65,8 +66,11 @@ export function Desk() {
       () => {},
     );
   }, []);
-  const cardFor = (g: Guest) =>
-    renderCard({ src: cardSrc, name: g.name, code: g.code, nameSlot: cfg.invitationArt.nameSlot, codeSlot: cfg.invitationArt.codeSlot });
+  const cardFor = useCallback(
+    (g: Guest) => renderCard({ src: cardSrc, name: g.name, code: g.code, nameSlot: cfg.invitationArt.nameSlot, codeSlot: cfg.invitationArt.codeSlot }),
+    [cardSrc],
+  );
+  const [cardStep, setCardStep] = useState<Guest | null>(null);
 
   async function saveCard(g: Guest) {
     try {
@@ -77,36 +81,25 @@ export function Desk() {
   }
 
   /**
-   * WhatsApp with the personalised card: on phones, the share sheet sends the card image and the message
-   * together (pick WhatsApp). Desktop browsers can't share images to WhatsApp, so the card is downloaded
-   * and WhatsApp opens with the message, ready for the card to be attached.
+   * WhatsApp with the personalised card. The guest's chat always opens with the message (as a link, which
+   * can't carry an image, and WhatsApp drops the text when an image is shared). On phones the card then
+   * follows from the share sheet; desktop browsers can't share images, so the card is downloaded to attach.
    */
   async function sendWithCard(g: Guest) {
-    if (!cardSrc || !getsCard(g)) {
-      window.open(sendHref(g), '_blank', 'noopener');
-      return markSent(g, g.channel);
-    }
-    if (canShareImages()) {
-      try {
-        const file = new File([await cardFor(g)], cardFileName(g.name), { type: 'image/jpeg' });
-        // Some WhatsApp versions drop the text when an image is shared, so keep it ready to paste as the caption.
-        navigator.clipboard?.writeText(g.message).catch(() => {});
-        await navigator.share({ files: [file], text: g.message });
-        await markSent(g, g.channel);
-      } catch (e) {
-        if ((e as Error).name !== 'AbortError') toast.error(e instanceof Error ? e.message : 'Couldn’t share the card');
-      }
-      return;
-    }
     window.open(sendHref(g), '_blank', 'noopener'); // open now, while the click still counts as the user's
-    await saveCard(g);
-    toast.success('Card downloaded. Attach it in the WhatsApp chat that just opened.');
+    if (cardSrc && getsCard(g)) {
+      if (canShareImages()) setCardStep(g);
+      else {
+        await saveCard(g);
+        toast.success('Card downloaded. Attach it in the WhatsApp chat that just opened.');
+      }
+    }
     markSent(g, g.channel);
   }
   useEffect(() => {
-    const i = setInterval(() => !document.hidden && editing === undefined && !importing && refresh(), 60_000);
+    const i = setInterval(() => !document.hidden && editing === undefined && !importing && !cardStep && refresh(), 60_000);
     return () => clearInterval(i);
-  }, [refresh, editing, importing]);
+  }, [refresh, editing, importing, cardStep]);
 
   const guests = useMemo(() => data?.guests ?? [], [data]);
   const counts = useMemo(() => {
@@ -331,6 +324,7 @@ export function Desk() {
       <ChurchRsvps rows={data?.church ?? []} onChanged={refresh} />
 
       <GuestDialog open={editing !== undefined} guest={editing ?? null} groups={groups} onClose={() => setEditing(undefined)} onSaved={refresh} />
+      <SendCardDialog guest={cardStep} render={cardFor} onClose={() => setCardStep(null)} />
       <ImportDialog open={importing} onClose={() => setImporting(false)} onImported={refresh} />
     </StaffPage>
   );
