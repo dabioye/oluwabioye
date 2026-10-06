@@ -6,6 +6,7 @@
 //   node scripts/serve.mjs                 serve the builds
 //   node scripts/serve.mjs --dev           proxy pages to `next dev` servers instead (hot reload)
 import http from 'node:http';
+import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -77,7 +78,7 @@ function site(cfg, port, devPort) {
   const redirects = (cfg.redirects || []).map((r) => ({ ...r, re: matcher(r.source) }));
   const headers = (cfg.headers || []).map((h) => ({ ...h, re: matcher(h.source) }));
 
-  return http.createServer((req, res) => {
+  const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
     const p = decodeURIComponent(url.pathname);
     const extra = Object.fromEntries(headers.filter((h) => h.re.test(p)).flatMap((h) => h.headers.map((x) => [x.key, x.value])));
@@ -117,6 +118,22 @@ function site(cfg, port, devPort) {
     res.writeHead(404);
     res.end('Not found');
   });
+
+  // Dev mode: pass WebSocket upgrades (Next's hot-reload channel) through to `next dev`.
+  // Without it the page's JavaScript waits for that connection and never starts.
+  server.on('upgrade', (req, socket, head) => {
+    if (!DEV) return socket.destroy();
+    const upstream = net.connect(devPort, '127.0.0.1', () => {
+      const lines = [`${req.method} ${req.url} HTTP/${req.httpVersion}`];
+      for (let i = 0; i < req.rawHeaders.length; i += 2) lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
+      upstream.write(lines.join('\r\n') + '\r\n\r\n');
+      if (head?.length) upstream.write(head);
+      socket.pipe(upstream).pipe(socket);
+    });
+    upstream.on('error', () => socket.destroy());
+    socket.on('error', () => upstream.destroy());
+  });
+  return server;
 }
 
 const byTarget = Object.fromEntries(hosting.map((h) => [h.target, h]));
