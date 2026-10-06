@@ -271,14 +271,23 @@ test('guests’ WhatsApp replies arrive in the inbox, alert the couple, and can 
   expect(alert.template.components[0].parameters.map((p: { text: string }) => p.text)).toEqual(['Lara Bello', 'Thank you so much! We’ll be there.']);
 
   await page.goto(`${PUBLIC}/admin`);
-  await expect(page.getByText('Lara Bello replied on WhatsApp: “Thank you so much!')).toBeVisible();
+  await expect(page.getByText('Lara Bello replied on WhatsApp: “Thank you so much!').first()).toBeVisible();
   await page.getByRole('link', { name: 'Inbox' }).click();
   const item = page.getByRole('list', { name: 'Conversations' }).getByRole('button', { name: /Lara Bello/ });
   await expect(item).toContainText('1');
+  const loaded = page.waitForResponse((r) => r.url().includes(`/api/admin/inbox/${lara.id}`));
   await item.click();
+  const thread = await (await loaded).json();
   const convo = page.getByRole('region', { name: 'Conversation with Lara Bello' });
   const messages = convo.getByRole('log', { name: 'Messages' });
-  await expect(messages.getByText('We’ll be there.')).toBeVisible();
+  await expect(messages.getByText('We’ll be there.'))
+    .toBeVisible()
+    .catch(async (e) => {
+      // Show what the inbox actually had, to tell a data problem from a display one.
+      console.log('thread API:', JSON.stringify(thread).slice(0, 1500));
+      console.log('conversation on screen:', await convo.innerText().catch(() => '(none)'));
+      throw e;
+    });
   await expect(convo.getByText(/You can reply freely for 2[34] hours more/)).toBeVisible();
   await convo.getByLabel('Reply').fill('See you on the 17th, Lara!');
   await convo.getByRole('button', { name: 'Send' }).click();
