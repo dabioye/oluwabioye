@@ -3,8 +3,9 @@
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const web = path.dirname(path.dirname(new URL(import.meta.url).pathname));
+const web = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 // Run Next with this same Node binary: works even when npx isn't on the PATH (IDE tasks, nvm).
 const next = createRequire(import.meta.url).resolve('next/dist/bin/next');
 // Next also starts `node` workers itself, so put this Node's folder first on the PATH.
