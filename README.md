@@ -23,12 +23,15 @@ Day to day you don't deploy by hand: **every push to `main` is tested and deploy
 
 ### Secrets (already set; change them like this)
 
-The site reads three secrets from Secret Manager. To change one (for example the admin password), run it from a computer logged in with `firebase login`, then redeploy:
+The site reads six secrets from Secret Manager (all six must exist, or the deploy fails). To change one (for example the admin password), run it from a computer logged in with `firebase login`, then redeploy:
 
 ```bash
 firebase functions:secrets:set ADMIN_PASSWORD --project sarahanddamilare   # /admin
 firebase functions:secrets:set CHECKIN_PIN    --project sarahanddamilare   # ushers at /checkin
 firebase functions:secrets:set SESSION_SECRET --project sarahanddamilare   # any long random string
+firebase functions:secrets:set WHATSAPP_TOKEN        --project sarahanddamilare   # see "WhatsApp Business" below
+firebase functions:secrets:set WHATSAPP_APP_SECRET   --project sarahanddamilare
+firebase functions:secrets:set WHATSAPP_VERIFY_TOKEN --project sarahanddamilare
 firebase functions:secrets:access ADMIN_PASSWORD --project sarahanddamilare  # show the current value
 ```
 
@@ -121,10 +124,69 @@ Everything is in `functions/src/config.js`: families, events, venues, map links,
 
 On private invitations each guest's name is written into the traditional card; long names go on two smaller lines. If you upload a new card design, leave that space empty; adjust `invitationArt.nameSlot` in `config.js` if the name sits too high or low.
 
+## WhatsApp Business (Cloud API, from +234 807 269 2636)
+
+Invitations can go out from the couple's WhatsApp Business number without opening WhatsApp:
+- **Send · WhatsApp** on a guest shows exactly what they'll get (their card and the message), then sends it.
+- **Send all pending via WhatsApp** works through everyone who hasn't had theirs.
+- Each guest shows how far their invite got: blue = queued/sent, green = delivered, solid green = read, red = failed, with the reason.
+- **Inbox** (`/admin/inbox`) collects guests' replies. You can answer in free text for 24 hours after the guest's last message (WhatsApp's rule). After that, answer from the phone.
+- Every reply also sends an alert to your own phone.
+
+Until it's connected, the desk works as before: it opens WhatsApp with the message, then shares the card.
+
+### 1. Templates (WhatsApp Manager → Message templates → Create)
+
+The site reads each template from Meta (language, image header, variables, button), so you can edit the wording later without a code change.
+
+**`oluwabioye_invitation`** (approved, Marketing). If its header is an **Image**, each guest's personalised card is sent as that image. Without an image header, the message goes out on its own. The body variables are filled by their sample values: a name sample gets the guest's name, and a date sample gets the RSVP date. A dynamic **View invitation** button `https://oluwabioye.dabioye.com/i/{{1}}` gets the guest's code.
+
+**`guest_reply_alert`** (Utility, English), the alert sent to your own phone when a guest replies:
+- **Body:**
+  ```
+  New reply: {{1}} replied to their invitation: {{2}}. Open the inbox to answer.
+  ```
+  Samples: `{{1}}` = `Tope Omidiji`, `{{2}}` = `Thank you, we'll be there!`
+
+  Meta rejects templates whose body starts or ends with a variable. That's why the requested text "{{1}} replied to their invitation: {{2}}" has a few words around it.
+- **Button:** Visit website · text `Open inbox` · **Static** URL `https://sarahanddamilare.dabioye.com/admin/inbox`.
+
+  A dynamic URL `https://sarahanddamilare.dabioye.com/{{1}}` also works (sample `https://sarahanddamilare.dabioye.com/admin/inbox`). It opens straight on that guest's conversation.
+
+### 2. Secrets and settings
+
+| What | Where |
+| --- | --- |
+| `WHATSAPP_TOKEN`: permanent System User token (expiry **Never**) with `whatsapp_business_messaging` and `whatsapp_business_management` | Secret |
+| `WHATSAPP_APP_SECRET`: Meta app → App settings → Basic → **App secret** (signs the webhook) | Secret |
+| `WHATSAPP_VERIFY_TOKEN`: any random string you make up, also typed into Meta in step 3 | Secret |
+| `WHATSAPP_ALERT_TO`: your personal number for reply alerts, e.g. `0803…` or `+44…` | GitHub repo **variable** (Settings → Secrets and variables → Actions → Variables) |
+| `WHATSAPP_PHONE_ID`: already in `functions/src/config.js` (`1170328419507856`); a variable of the same name overrides it | optional variable |
+
+A secret you aren't ready to use can be set to `none`; that feature then stays off. The desk's **WhatsApp Business** panel shows the following, and says plainly if anything needs fixing:
+- the number and its quality rating;
+- the template and whether it's approved;
+- whether the token expires.
+
+### 3. Webhook (receipts and replies)
+
+Meta app → WhatsApp → Configuration → Webhook:
+- **Callback URL:** `https://sarahanddamilare.dabioye.com/api/whatsapp/webhook`
+- **Verify token:** the same `WHATSAPP_VERIFY_TOKEN`
+- **Subscribe** to the **messages** field. That one field carries both delivery receipts and guests' replies.
+
+### 4. Turn it on
+
+1. Test with **Send · WhatsApp** on a guest entry with your own number.
+2. Optionally tick **Edit website → WhatsApp invitations → Send automatically**. Guests are then sent their invitation as soon as they're added or imported. This only works with a template without an image: the card is drawn in the browser, so an image template is always sent from the desk.
+3. Use **Send all pending via WhatsApp** for everyone else. Guests marked "Printed card" or who declined are skipped.
+
+A new WhatsApp Business account can message about 250 people a day, which covers the whole guest list.
+
 ## Sending traditional invitations
 
 1. Import your list (`guest-template.csv` shows the columns) or add guests one by one.
-2. Filter **Not sent** and tap **Send next on WhatsApp** (or **Send · WhatsApp** on a guest). Guests invited to the traditional wedding get their **personalised card** (their name and access code on the card) as well as the message. WhatsApp opens the guest's chat with the message ready, so send it. On a phone, come back to the desk and tap **Share card**, pick WhatsApp, then the guest (top of your recent chats). On a laptop the card is downloaded instead, so attach it in the chat. WhatsApp can't take an image and a caption from a link, and drops the text when an image is shared, so they go as two messages. **Card** downloads a guest's card on its own. The message reminds guests the link is personal. Guests who lose the link can type their code (the last 6 characters of the link) on `oluwabioye.dabioye.com`.
+2. With WhatsApp Business connected (above), tap **Send all pending via WhatsApp**, or **Send · WhatsApp** on a guest. Without it, filter **Not sent** and tap **Send next on WhatsApp** (or **Send · WhatsApp** on a guest). Guests invited to the traditional wedding get their **personalised card** (their name and access code on the card) as well as the message. WhatsApp opens the guest's chat with the message ready, so send it. On a phone, come back to the desk and tap **Share card**, pick WhatsApp, then the guest (top of your recent chats). On a laptop the card is downloaded instead, so attach it in the chat. WhatsApp can't take an image and a caption from a link, and drops the text when an image is shared, so they go as two messages. **Card** downloads a guest's card on its own. The message reminds guests the link is personal. Guests who lose the link can type their code (the last 6 characters of the link) on `oluwabioye.dabioye.com`.
 3. For printed cards, set *Send via → Printed card* and tick **Card given**.
 4. Chase **Sent, not opened** and **Opened, no reply** before the RSVP date.
 

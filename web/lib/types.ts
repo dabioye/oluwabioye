@@ -126,3 +126,33 @@ export type SiteSettings = {
 };
 
 export type Role = 'admin' | 'checkin' | null;
+
+/** WhatsApp conversations (GET /api/admin/inbox and /api/admin/inbox/:thread). */
+export type InboxMessage = {
+  id: string;
+  thread: string;
+  dir: 'in' | 'out';
+  type: string;
+  text: string;
+  at: string;
+  name: string;
+  status?: 'accepted' | 'sent' | 'delivered' | 'read' | 'failed';
+  error?: string;
+};
+export type InboxThread = {
+  thread: string;
+  guestId: string | null;
+  name: string;
+  phone: string;
+  unread: number;
+  last: { dir: 'in' | 'out'; text: string; at: string };
+  windowUntil: string | null;
+};
+export type InboxConversation = {
+  thread: string;
+  guest: Guest | null;
+  name: string;
+  phone: string;
+  messages: InboxMessage[];
+  windowUntil: string | null;
+};

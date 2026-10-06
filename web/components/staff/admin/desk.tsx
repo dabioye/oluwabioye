@@ -168,6 +168,7 @@ export function Desk() {
         title="Invitation desk"
         subtitle={`${weekday()} ${longDate(cfg.date)} · RSVP by ${longDate(cfg.rsvpBy)}`}
         links={[
+          { href: '/admin/inbox', label: 'Inbox' },
           { href: '/admin/site', label: 'Edit website' },
           { href: '/', label: 'Website', external: true },
           { href: '#church', label: 'Church RSVPs' },

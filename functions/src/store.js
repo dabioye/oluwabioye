@@ -65,7 +65,7 @@ function jsonBackend() {
   const path = require('path');
   const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data');
   const FILE = path.join(DATA_DIR, 'guests.json');
-  let state = { guests: [], activity: [], publicRsvps: [], settings: {} };
+  let state = { guests: [], activity: [], publicRsvps: [], settings: {}, messages: [] };
   let queue = Promise.resolve();
   const limits = new Map();
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -137,6 +137,31 @@ function jsonBackend() {
 
     async getSettings() { return JSON.parse(JSON.stringify(state.settings || {})); },
     async saveSettings(obj) { state.settings = obj; await persist(); },
+    async logActivity(type, g, extra) { log(type, g, extra); await persist(); },
+    // WhatsApp conversations: one record per message, in or out, grouped by thread (a guest id, or p:<number>).
+    async addMessage(m) {
+      state.messages ||= [];
+      if (state.messages.some((x) => x.id === m.id)) return false; // Meta retries webhooks
+      state.messages.push({ ...m });
+      if (state.messages.length > 5000) state.messages = state.messages.slice(-5000);
+      await persist();
+      return true;
+    },
+    async messages({ thread, limit = 1000 } = {}) {
+      const all = (state.messages || []).filter((m) => !thread || m.thread === thread);
+      return all.slice(-limit).map((m) => ({ ...m }));
+    },
+    async updateMessage(id, p) {
+      const m = (state.messages || []).find((x) => x.id === id);
+      if (!m) return null;
+      Object.assign(m, p);
+      await persist();
+      return { ...m };
+    },
+    async markThreadRead(thread) {
+      (state.messages || []).forEach((m) => { if (m.thread === thread && m.dir === 'in') m.read = true; });
+      await persist();
+    },
     async saveMedia(buf, type) {
       const id = crypto.randomBytes(10).toString('hex') + (type === 'image/png' ? '.png' : type === 'image/webp' ? '.webp' : '.jpg');
       fs.mkdirSync(path.join(DATA_DIR, 'media'), { recursive: true });
@@ -173,6 +198,7 @@ function firestoreBackend() {
   const pub = db.collection('churchRsvps');
   const data = (snap) => (snap.exists ? snap.data() : null);
   const log = (type, g, extra = '') => acts.add({ at: now(), type, guestId: g?.id || null, name: g?.name || '', extra }).catch((e) => console.error(e));
+  const msgDoc = (id) => db.collection('messages').doc(crypto.createHash('sha256').update(String(id)).digest('hex').slice(0, 40));
   const patch = async (id, p, logType, extra) => {
     const ref = guests.doc(id);
     await ref.update(p);
@@ -261,6 +287,28 @@ function firestoreBackend() {
     // Site content edited in /admin/site
     async getSettings() { return data(await db.collection('settings').doc('site').get()) || {}; },
     async saveSettings(obj) { await db.collection('settings').doc('site').set(obj); },
+    async logActivity(type, g, extra) { await log(type, g, extra); },
+    // WhatsApp conversations (sorted in memory, so no composite indexes are needed). WhatsApp ids can
+    // contain "/", which a document id can't, so documents are keyed by a hash of the id.
+    async addMessage(m) {
+      try { await msgDoc(m.id).create(m); return true; } catch (e) { if (e.code === 6) return false; throw e; }
+    },
+    async messages({ thread, limit = 1000 } = {}) {
+      const q = thread ? db.collection('messages').where('thread', '==', thread) : db.collection('messages').orderBy('at', 'desc').limit(limit);
+      const rows = (await q.get()).docs.map((d) => d.data());
+      return rows.sort((a, b) => String(a.at).localeCompare(String(b.at))).slice(-limit);
+    },
+    async updateMessage(id, p) {
+      const ref = msgDoc(id);
+      try { await ref.update(p); } catch (e) { if (e.code === 5) return null; throw e; }
+      return data(await ref.get());
+    },
+    async markThreadRead(thread) {
+      const snap = await db.collection('messages').where('thread', '==', thread).where('read', '==', false).get();
+      const batch = db.batch();
+      snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
+      if (!snap.empty) await batch.commit();
+    },
     // Photos live in Firestore (each under 1 MB after in-browser resizing) and are served
     // through /media/<id> with a long CDN cache, so there is no separate Storage bucket to set up.
     async saveMedia(buf, type) {

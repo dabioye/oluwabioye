@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
@@ -227,4 +228,69 @@ test('with WhatsApp Business, the desk sends each guest their card and message f
   meta = await (await request.get(`${META}/__sent`)).json();
   expect(meta.sent.map((m: { to: string }) => m.to)).toContain('2348088888888');
   expect(meta.sent.filter((m: { to: string }) => m.to === '2348077777777')).toHaveLength(1);
+});
+
+test('guests’ WhatsApp replies arrive in the inbox, alert the couple, and can be answered', async ({ page, request }) => {
+  const lara = await addGuest(page.request, { name: 'Lara Bello', phone: '0809 999 9999' });
+  // Meta delivers the reply to the webhook, signed with the app secret.
+  const body = JSON.stringify({
+    entry: [
+      {
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              contacts: [{ profile: { name: 'Lara' }, wa_id: '2348099999999' }],
+              messages: [
+                {
+                  from: '2348099999999',
+                  id: 'wamid.lara1',
+                  timestamp: String(Math.floor(Date.now() / 1000)),
+                  type: 'text',
+                  text: { body: 'Thank you so much!\nWe’ll be there.' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  });
+  const hook = await request.post(`${PUBLIC}/api/whatsapp/webhook`, {
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Hub-Signature-256': 'sha256=' + crypto.createHmac('sha256', 'e2e-app-secret').update(body).digest('hex'),
+    },
+    data: body,
+  });
+  expect(hook.status()).toBe(200);
+  let meta = await (await request.get(`${META}/__sent`)).json();
+  const alert = meta.sent.filter((m: { to: string }) => m.to === '2348011112222').at(-1);
+  expect(alert.template.name).toBe('guest_reply_alert');
+  expect(alert.template.components[0].parameters.map((p: { text: string }) => p.text)).toEqual(['Lara Bello', 'Thank you so much! We’ll be there.']);
+
+  await page.goto(`${PUBLIC}/admin`);
+  await expect(page.getByText('Lara Bello replied on WhatsApp: “Thank you so much!')).toBeVisible();
+  await page.getByRole('link', { name: 'Inbox' }).click();
+  const item = page.getByRole('list', { name: 'Conversations' }).getByRole('button', { name: /Lara Bello/ });
+  await expect(item).toContainText('1');
+  await item.click();
+  const convo = page.getByLabel('Conversation with Lara Bello');
+  await expect(convo.getByText('We’ll be there.')).toBeVisible();
+  await expect(convo.getByText(/You can reply freely for 2[34] hours more/)).toBeVisible();
+  await convo.getByLabel('Reply').fill('See you on the 17th, Lara!');
+  await convo.getByRole('button', { name: 'Send' }).click();
+  await expect(convo.getByText('See you on the 17th, Lara!')).toBeVisible();
+  await expect(convo.getByLabel('Reply')).toHaveValue('');
+  meta = await (await request.get(`${META}/__sent`)).json();
+  expect(meta.sent.at(-1)).toEqual({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: '2348099999999',
+    type: 'text',
+    text: { body: 'See you on the 17th, Lara!', preview_url: true },
+  });
+  // The link in the alert opens straight on the conversation.
+  await page.goto(`${PUBLIC}/admin/inbox?thread=${lara.id}`);
+  await expect(page.getByLabel('Conversation with Lara Bello').getByText('See you on the 17th, Lara!')).toBeVisible();
 });

@@ -99,6 +99,7 @@ const publicGuest = (g) => ({ ...g, link: inviteLink(g), message: message(g) });
 // What a guest sees about themselves on their invitation.
 const inviteGuest = (g) => ({ name: g.name, code: g.code, events: g.events, rsvp: g.rsvp, rsvpNote: g.rsvpNote, driverCard: !!g.driverCard });
 whatsapp.setValues(async (g) => ({ name: g.name, first: g.name.split(/\s+/)[0], code: g.code, link: inviteLink(g), rsvpBy: longDate((await content.current()).rsvpBy) }));
+whatsapp.setInboxLink((thread) => `${BASE_URL()}/admin/inbox?thread=${encodeURIComponent(thread)}`);
 // Auto-send the WhatsApp invitation when a guest is added or imported, if turned on in Edit website
 // (and the template doesn't need each guest's card, which only the desk can draw).
 const autoSend = async () => whatsapp.configured() && !!(await content.current()).waAutoSend && !(await whatsapp.needsCard().catch(() => true));
@@ -176,7 +177,8 @@ app.post('/api/invite/:code/rsvp', limit(20, 60_000), wrap(async (req, res) => {
 
 // ---------- staff sign-in ----------
 app.get('/api/session', (req, res) => res.json({ role: roleOf(req) }));
-app.post('/api/login', limit(8, 60_000), (req, res) => {
+// Sign-in attempts per minute per visitor (raised only by the browser tests, which sign in often).
+app.post('/api/login', limit(Number(env('LOGIN_LIMIT')) || 8, 60_000), (req, res) => {
   const kind = req.body.kind === 'checkin' ? 'checkin' : 'admin';
   const given = String(req.body.password || '');
   const pw = env('ADMIN_PASSWORD');
@@ -307,6 +309,40 @@ api.post('/whatsapp/send-pending', wrap(async (req, res) => {
   const batch = pending.slice(0, 150);
   const r = await whatsapp.sendMany(batch);
   res.json({ ...r, remaining: pending.length - batch.length });
+}));
+// Inbox: guests' WhatsApp replies, and free-text answers while their 24-hour window is open.
+api.get('/inbox', wrap(async (req, res) => {
+  const threads = new Map();
+  for (const m of await store.messages({ limit: 2000 })) {
+    const t = threads.get(m.thread) || { thread: m.thread, guestId: m.guestId, name: m.name, phone: m.phone, unread: 0, last: null, windowUntil: null };
+    if (m.dir === 'in') {
+      t.name = m.name;
+      t.windowUntil = whatsapp.windowUntil([m]);
+      if (!m.read) t.unread++;
+    }
+    t.last = { dir: m.dir, text: m.text, at: m.at };
+    threads.set(m.thread, t);
+  }
+  res.json({ threads: [...threads.values()].sort((a, b) => b.last.at.localeCompare(a.last.at)), configured: whatsapp.configured() });
+}));
+api.get('/inbox/:thread', wrap(async (req, res) => {
+  const thread = req.params.thread;
+  const messages = await store.messages({ thread });
+  const g = thread.startsWith('p:') ? null : await store.byId(thread);
+  if (!messages.length && !g) return res.status(404).json({ error: 'Conversation not found' });
+  await store.markThreadRead(thread);
+  res.json({
+    thread, guest: g ? publicGuest(g) : null,
+    name: g?.name || messages.find((m) => m.dir === 'in')?.name || thread.slice(2),
+    phone: g ? whatsapp.toWaNumber(g.phone) : thread.slice(2),
+    messages, windowUntil: whatsapp.windowUntil(messages),
+  });
+}));
+api.post('/inbox/:thread/reply', wrap(async (req, res) => {
+  try { res.json(await whatsapp.reply(req.params.thread, req.body.text)); } catch (e) {
+    if (!(e instanceof whatsapp.WhatsAppError)) throw e;
+    res.status(400).json({ error: e.message });
+  }
 }));
 app.use('/api/admin', api);
 

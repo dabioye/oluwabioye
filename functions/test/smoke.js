@@ -150,6 +150,13 @@ const store = require('../src/store');
       { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'View invitation', url: 'http://invite.test/i/{{1}}', example: ['http://invite.test/i/B27CVE'] }] },
     ],
   } };
+  meta.alert = {
+    name: 'guest_reply_alert', language: 'en', status: 'APPROVED', category: 'UTILITY',
+    components: [
+      { type: 'BODY', text: 'Guest reply: {{1}} replied to their invitation: {{2}}', example: { body_text: [['Tope Omidiji', 'Thank you, we will be there!']] } },
+      { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Open inbox', url: 'http://public.test/{{1}}', example: ['http://public.test/admin/inbox'] }] },
+    ],
+  };
   const reply = (status, o) => ({ ok: status < 400, status, json: async () => o });
   wa._setFetch(async (url, opts) => {
     const u = new URL(url);
@@ -157,7 +164,7 @@ const store = require('../src/store');
     const call = { path: u.pathname, auth: opts.headers.Authorization, body: opts.body };
     meta.calls.push(call);
     if (u.pathname === '/debug_token') return reply(200, { data: { is_valid: true, expires_at: 0, granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['WABA1'] }] } });
-    if (u.pathname === '/WABA1/message_templates') return reply(200, { data: [meta.template] });
+    if (u.pathname === '/WABA1/message_templates') return reply(200, { data: [meta.template, meta.alert].filter((t) => t.name === u.searchParams.get('name')) });
     if (u.pathname === '/PHONE1') return reply(200, { display_phone_number: '+234 807 269 2636', verified_name: 'Dabioye Solutions', quality_rating: 'GREEN' });
     if (u.pathname === '/PHONE1/media') return reply(200, { id: 'MEDIA1' });
     if (u.pathname === '/PHONE1/messages') {
@@ -226,6 +233,51 @@ const store = require('../src/store');
   assert.equal((await req('/api/whatsapp/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': 'sha256=bad' }, body: hook })).status, 401);
   assert.equal((await req('/api/whatsapp/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': sig }, body: hook })).status, 200);
   assert.equal((await store.byId(ada.id)).waStatus, 'read', 'read is not downgraded by a late delivered');
+
+  // Replies: saved to the guest's thread and the activity feed, with an alert to the couple's own phone
+  process.env.WHATSAPP_ALERT_TO = '0801 111 2222';
+  const signed = (o) => { const b = JSON.stringify(o); return { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': 'sha256=' + require('crypto').createHmac('sha256', 'appsecret').update(b).digest('hex') }, body: b }; };
+  const incoming = (from, id, text, name, ts = Math.floor(Date.now() / 1000)) => ({ entry: [{ changes: [{ field: 'messages', value: {
+    messaging_product: 'whatsapp', contacts: [{ profile: { name }, wa_id: from }],
+    messages: [{ from, id, timestamp: String(ts), type: 'text', text: { body: text } }],
+  } }] }] });
+  const sendsTo = (to) => meta.calls.filter((c) => c.path === '/PHONE1/messages' && c.json.to === to).map((c) => c.json);
+  r = await req('/api/whatsapp/webhook', signed(incoming('2348035550000', 'wamid.in1', 'Thank you!\n\nWe’ll be there', 'Ada L')));
+  assert.equal(r.status, 200);
+  assert.equal((await req('/api/whatsapp/webhook', signed(incoming('2348035550000', 'wamid.in1', 'Thank you!\n\nWe’ll be there', 'Ada L')))).status, 200, 'retries are fine');
+  const alerts = sendsTo('2348011112222');
+  assert.equal(alerts.length, 1, 'one alert, even when Meta retries');
+  assert.deepEqual(alerts[0].template, { name: 'guest_reply_alert', language: { code: 'en' }, components: [
+    { type: 'body', parameters: [{ type: 'text', text: 'Ada Lovelace' }, { type: 'text', text: 'Thank you! We’ll be there' }] },
+    { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: `admin/inbox?thread=${ada.id}` }] },
+  ] });
+  assert((await store.byId(ada.id)).waLastInAt, 'the guest’s 24-hour window is open');
+  await req('/api/whatsapp/webhook', signed(incoming('447700900123', 'wamid.in2', 'Who is this?', 'Stranger', Math.floor(Date.now() / 1000) + 1)));
+  await req('/api/whatsapp/webhook', signed(incoming('2348031112223', 'wamid.in3', 'Late reply', 'Good', Math.floor(Date.now() / 1000) - 2 * 86400)));
+  r = await req('/api/admin/inbox', { headers: { cookie: admin } });
+  const inbox = await r.json();
+  assert.deepEqual(inbox.threads.map((t) => [t.name, t.unread]), [['Stranger', 1], ['Ada Lovelace', 1], ['Good One', 1]]);
+  assert.equal(inbox.threads[0].thread, 'p:447700900123');
+  r = await req('/api/admin/guests', { headers: { cookie: admin } });
+  assert((await r.json()).activity.some((a) => a.type === 'wareply' && a.name === 'Ada Lovelace' && a.extra.startsWith('Thank you!')));
+  r = await req(`/api/admin/inbox/${ada.id}`, { headers: { cookie: admin } });
+  const thread = await r.json();
+  assert.deepEqual(thread.messages.map((m) => [m.dir, m.text]), [['in', 'Thank you!\n\nWe’ll be there']]);
+  assert(new Date(thread.windowUntil) > new Date());
+  assert.equal((await (await req('/api/admin/inbox', { headers: { cookie: admin } })).json()).threads[1].unread, 0, 'opening a thread marks it read');
+  r = await req(`/api/admin/inbox/${ada.id}/reply`, json('POST', { text: 'See you on the 17th!' }, admin));
+  const out = await r.json();
+  assert.equal(r.status, 200, JSON.stringify(out));
+  assert.deepEqual(sendsTo('2348035550000').at(-1), { messaging_product: 'whatsapp', recipient_type: 'individual', to: '2348035550000', type: 'text', text: { body: 'See you on the 17th!', preview_url: true } });
+  await req('/api/whatsapp/webhook', signed({ entry: [{ changes: [{ value: { statuses: [{ id: out.id, status: 'delivered' }] } }] }] }));
+  r = await req(`/api/admin/inbox/${ada.id}`, { headers: { cookie: admin } });
+  assert.deepEqual((await r.json()).messages.map((m) => [m.dir, m.text, m.status || '']), [['in', 'Thank you!\n\nWe’ll be there', ''], ['out', 'See you on the 17th!', 'delivered']]);
+  assert.equal((await req('/api/admin/inbox/p:447700900123/reply', json('POST', { text: 'Hi' }, admin))).status, 200, 'numbers not on the list can be answered too');
+  const goodId = inbox.threads[2].thread;
+  r = await req(`/api/admin/inbox/${goodId}/reply`, json('POST', { text: 'Sorry for the delay' }, admin));
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).error, /24-hour window has closed/);
+  assert.equal((await req(`/api/admin/inbox/${goodId}`, { headers: { cookie: gate } })).status, 401);
 
   // A template that starts with an image gets each guest's card from the desk; nothing can go out without it
   meta.template = { ...meta.template, components: [{ type: 'HEADER', format: 'IMAGE' }, ...meta.template.components] };

@@ -37,10 +37,13 @@ export default defineConfig({
         ADMIN_PASSWORD: 'test-admin',
         CHECKIN_PIN: '4321',
         SESSION_SECRET: 'e2e-secret-e2e-secret-e2e-secret',
+        LOGIN_LIMIT: '100',
         // WhatsApp Business, against the stand-in above
         WHATSAPP_API_BASE: META,
         WHATSAPP_TOKEN: 'e2e-token',
         WHATSAPP_PHONE_ID: 'PHONE1',
+        WHATSAPP_APP_SECRET: 'e2e-app-secret',
+        WHATSAPP_ALERT_TO: '08011112222',
       },
     },
   ],

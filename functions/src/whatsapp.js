@@ -65,10 +65,10 @@ async function tokenInfo() {
   return { valid: d.is_valid !== false, expiresAt: d.expires_at ? new Date(d.expires_at * 1000).toISOString() : null, accounts: [...accounts] };
 }
 
-let cached = null; // { at, value }
-async function template({ fresh = false } = {}) {
-  if (!fresh && cached && Date.now() - cached.at < 10 * 60e3) return cached.value;
-  const name = settings().template;
+let cached = {}; // name -> { at, value }
+async function template({ fresh = false, name = settings().template } = {}) {
+  const hit = cached[name];
+  if (!fresh && hit && Date.now() - hit.at < 10 * 60e3) return hit.value;
   const accounts = env('WHATSAPP_WABA_ID') ? [env('WHATSAPP_WABA_ID')] : (await tokenInfo()).accounts;
   if (!accounts.length) throw new WhatsAppError('The access token can’t see any WhatsApp Business account');
   const found = [];
@@ -78,7 +78,7 @@ async function template({ fresh = false } = {}) {
   }
   const t = found.find((x) => x.status === 'APPROVED') || found[0];
   if (!t) throw new WhatsAppError(`No template called “${name}” in WhatsApp Manager`);
-  cached = { at: Date.now(), value: t };
+  cached[name] = { at: Date.now(), value: t };
   return t;
 }
 // The README's layout, for when the template can't be read (e.g. a token without template access).
@@ -131,7 +131,7 @@ function urlSuffix(url, values) {
 }
 
 /** Template components for one guest, and the message as the guest will read it. */
-function fill(t, values, header) {
+function fill(t, values, header, pick = meaning) {
   const named = t.parameter_format === 'NAMED';
   const components = [];
   const read = {};
@@ -142,7 +142,7 @@ function fill(t, values, header) {
       const examples = examplesFor(c, named);
       const keys = varsIn(c.text);
       const parameters = keys.map((key, i) => {
-        const text = String(values[meaning(key, examples[key], i)] ?? '');
+        const text = String(values[pick(key, examples[key], i)] ?? '');
         return named ? { type: 'text', parameter_name: key, text } : { type: 'text', text };
       });
       components.push({ type: c.type.toLowerCase(), parameters });
@@ -270,8 +270,12 @@ function signatureOk(rawBody, header) {
 }
 const RANK = { accepted: 0, sent: 1, delivered: 2, read: 3, failed: 4 };
 async function handleWebhook(body) {
-  const statuses = (body.entry || []).flatMap((e) => (e.changes || []).flatMap((c) => (c.value && c.value.statuses) || []));
+  const values = (body.entry || []).flatMap((e) => (e.changes || []).map((c) => c.value || {}));
+  const statuses = values.flatMap((v) => v.statuses || []);
   for (const st of statuses) {
+    // A reply typed in the inbox
+    const m = await store.updateMessage(st.id, st.status === 'failed' ? { status: 'failed', error: ((st.errors || [])[0] || {}).title || 'Delivery failed' } : { status: st.status });
+    if (m) continue;
     const g = await store.byWaId(st.id);
     if (!g) continue;
     // Statuses can arrive out of order; never move backwards (except to failed).
@@ -281,11 +285,103 @@ async function handleWebhook(body) {
     if (st.status === 'read') p.waReadAt = new Date(Number(st.timestamp) * 1000 || Date.now()).toISOString();
     await store.setWa(g.id, p, st.status === 'read' ? 'waread' : st.status === 'failed' ? 'wafailed' : null, st.status === 'failed' ? p.waError : st.status);
   }
-  return statuses.length;
+  let replies = 0;
+  for (const v of values) {
+    for (const msg of v.messages || []) {
+      const contact = (v.contacts || []).find((c) => c.wa_id === msg.from) || {};
+      if (await receive(msg, contact.profile?.name || '')) replies++;
+    }
+  }
+  return statuses.length + replies;
+}
+
+// ---------- conversations ----------
+const DAY = 24 * 3600e3;
+/** A guest's thread is their id; someone not on the list gets one by number. */
+const threadFor = (g, from) => (g ? g.id : `p:${from}`);
+
+/** Readable text for any kind of WhatsApp message. */
+function textOf(m) {
+  switch (m.type) {
+    case 'text': return m.text?.body || '';
+    case 'button': return m.button?.text || '';
+    case 'interactive': return m.interactive?.button_reply?.title || m.interactive?.list_reply?.title || '';
+    case 'reaction': return m.reaction?.emoji ? `Reacted ${m.reaction.emoji}` : 'Removed a reaction';
+    case 'image': case 'video': case 'document':
+      return [`[${m.type}]`, m[m.type]?.caption || m.document?.filename || ''].filter(Boolean).join(' ');
+    case 'location': return `[location] ${[m.location?.name, m.location?.address].filter(Boolean).join(', ')}`.trim();
+    default: return `[${m.type || 'message'}]`;
+  }
+}
+
+async function receive(msg, profileName) {
+  const from = String(msg.from || '');
+  const g = (await store.all()).find((x) => toWaNumber(x.phone) === from) || null;
+  const at = new Date(Number(msg.timestamp) * 1000 || Date.now()).toISOString();
+  const text = textOf(msg).slice(0, 4000);
+  const fresh = await store.addMessage({
+    id: String(msg.id), thread: threadFor(g, from), guestId: g?.id || null, name: g?.name || profileName || `+${from}`,
+    phone: from, dir: 'in', type: msg.type || 'text', text, at, read: false,
+  });
+  if (!fresh) return false; // already saved (Meta retries)
+  if (g) await store.setWa(g.id, { waLastInAt: at }, 'wareply', text.slice(0, 120));
+  else await store.logActivity('wareply', { id: null, name: profileName || `+${from}` }, text.slice(0, 120));
+  await alert(g?.name || profileName || `+${from}`, text, threadFor(g, from)).catch((e) => console.error('WhatsApp alert failed:', e.message));
+  return true;
+}
+
+/** When the 24-hour window for free-text replies closes (null if the guest has never written). */
+function windowUntil(messages) {
+  const lastIn = [...messages].reverse().find((m) => m.dir === 'in');
+  return lastIn ? new Date(new Date(lastIn.at).getTime() + DAY).toISOString() : null;
+}
+
+/** A free-text reply in a thread, only while the guest's 24-hour window is open. */
+async function reply(thread, text) {
+  if (!configured()) throw new WhatsAppError('WhatsApp API is not set up yet.');
+  const body = String(text || '').trim().slice(0, 4096);
+  if (!body) throw new WhatsAppError('Type a message first.');
+  const history = await store.messages({ thread });
+  const until = windowUntil(history);
+  if (!until || Date.now() > new Date(until).getTime()) throw new WhatsAppError('The 24-hour window has closed. WhatsApp only lets you reply with a template until they write again.');
+  const g = thread.startsWith('p:') ? null : await store.byId(thread);
+  const to = g ? toWaNumber(g.phone) : thread.slice(2);
+  if (!to) throw new WhatsAppError('No valid WhatsApp number for this conversation.');
+  const r = await graph(`/${settings().phoneId}/messages`, { method: 'POST', body: { messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'text', text: { body, preview_url: true } } });
+  const m = { id: r.messages?.[0]?.id || `local-${crypto.randomUUID()}`, thread, guestId: g?.id || null, name: g?.name || history[0]?.name || `+${to}`, phone: to, dir: 'out', type: 'text', text: body, at: new Date().toISOString(), status: 'accepted', read: true };
+  await store.addMessage(m);
+  return m;
+}
+
+// ---------- alerts to the couple's own phone ----------
+// Template guest_reply_alert: body {{1}} guest, {{2}} what they wrote; a URL button to the inbox.
+// Template text can't hold line breaks, tabs or long runs of spaces, so the reply is flattened.
+const flat = (t, max) => String(t).replace(/\s+/g, ' ').trim().slice(0, max) || '…';
+const alertMeaning = (key, example, index) => {
+  const k = String(key).toLowerCase();
+  if (/link|url/.test(k)) return 'link';
+  if (/text|message|reply|body/.test(k)) return 'text';
+  if (/name|guest/.test(k)) return 'name';
+  return ['name', 'text'][index] || 'text';
+};
+let inboxLink = (thread) => `/admin/inbox?thread=${encodeURIComponent(thread)}`; // made absolute by the server
+const setInboxLink = (fn) => (inboxLink = fn);
+
+async function alert(name, text, thread) {
+  const to = toWaNumber(env('WHATSAPP_ALERT_TO'));
+  if (!configured() || !to) return null;
+  const tplName = env('WHATSAPP_ALERT_TEMPLATE') || 'guest_reply_alert';
+  const t = await template({ name: tplName }).catch(() => ({
+    name: tplName, language: settings().lang,
+    components: [{ type: 'BODY', text: '{{1}} replied to their invitation: {{2}}' }, { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Open inbox', url: '' }] }],
+  }));
+  const values = { name: flat(name, 60), text: flat(text, 500), link: inboxLink(thread), code: '' };
+  const { components } = fill(t, values, null, alertMeaning);
+  return graph(`/${settings().phoneId}/messages`, { method: 'POST', body: { messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'template', template: { name: t.name, language: { code: t.language }, components } } });
 }
 
 module.exports = {
   configured, status, preview, needsCard, sendInvite, sendMany, eligible, toWaNumber, setValues,
-  verifyChallenge, signatureOk, handleWebhook,
-  _setFetch: (f) => (fetchImpl = f), _reset: () => (cached = null),
+  verifyChallenge, signatureOk, handleWebhook, reply, windowUntil, setInboxLink, WhatsAppError,
+  _setFetch: (f) => (fetchImpl = f), _reset: () => (cached = {}),
 };
