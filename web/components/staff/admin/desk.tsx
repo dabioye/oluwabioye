@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, Download, Link2, Plus, Send, Trash2, Upload } from 'lucide-react';
+import { Copy, Download, ImageDown, Link2, Plus, Send, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { api, ApiError } from '@/lib/api';
 import { cfg } from '@/lib/config';
 import { ago, longDate, weekday } from '@/lib/format';
-import type { Activity, ChurchRsvp, Guest, Side } from '@/lib/types';
+import { canShareImages, cardFileName, download, preloadCard, renderCard } from '@/lib/card-image';
+import type { Activity, ChurchRsvp, Guest, Side, SiteSettings } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { StaffHeader, StaffPage } from '../staff-shell';
 import { GuestDialog } from './guest-dialog';
@@ -19,6 +20,9 @@ import { ImportDialog } from './import-dialog';
 import { activityText, CHANNEL_LABEL, PILL, sendHref, type Stage, STAGES, stageOf } from './model';
 
 type Data = { guests: Guest[]; activity: Activity[]; church: ChurchRsvp[]; inviteUrl: string };
+
+// Guests invited to the traditional wedding get their personalised card image with the message.
+const getsCard = (g: Guest) => g.events.includes('trad');
 
 async function copy(text: string, done: string) {
   try {
@@ -47,6 +51,58 @@ export function Desk() {
   );
 
   useEffect(() => void refresh(), [refresh]);
+
+  // The traditional card the guests' personalised images are drawn on (an upload, or the built-in one on the invite site).
+  const [cardSrc, setCardSrc] = useState('');
+  useEffect(() => {
+    api<SiteSettings>('/api/admin/site').then(
+      (s) => {
+        const src = s.invitationArt?.trad || cfg.invitationArt.trad;
+        const full = src.startsWith('/img/') && s.inviteUrl ? `${s.inviteUrl}${src}` : src;
+        setCardSrc(full);
+        preloadCard(full);
+      },
+      () => {},
+    );
+  }, []);
+  const cardFor = (g: Guest) =>
+    renderCard({ src: cardSrc, name: g.name, code: g.code, nameSlot: cfg.invitationArt.nameSlot, codeSlot: cfg.invitationArt.codeSlot });
+
+  async function saveCard(g: Guest) {
+    try {
+      download(await cardFor(g), cardFileName(g.name));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Couldn’t create the card');
+    }
+  }
+
+  /**
+   * WhatsApp with the personalised card: on phones, the share sheet sends the card image and the message
+   * together (pick WhatsApp). Desktop browsers can't share images to WhatsApp, so the card is downloaded
+   * and WhatsApp opens with the message, ready for the card to be attached.
+   */
+  async function sendWithCard(g: Guest) {
+    if (!cardSrc || !getsCard(g)) {
+      window.open(sendHref(g), '_blank', 'noopener');
+      return markSent(g, g.channel);
+    }
+    if (canShareImages()) {
+      try {
+        const file = new File([await cardFor(g)], cardFileName(g.name), { type: 'image/jpeg' });
+        // Some WhatsApp versions drop the text when an image is shared, so keep it ready to paste as the caption.
+        navigator.clipboard?.writeText(g.message).catch(() => {});
+        await navigator.share({ files: [file], text: g.message });
+        await markSent(g, g.channel);
+      } catch (e) {
+        if ((e as Error).name !== 'AbortError') toast.error(e instanceof Error ? e.message : 'Couldn’t share the card');
+      }
+      return;
+    }
+    window.open(sendHref(g), '_blank', 'noopener'); // open now, while the click still counts as the user's
+    await saveCard(g);
+    toast.success('Card downloaded. Attach it in the WhatsApp chat that just opened.');
+    markSent(g, g.channel);
+  }
   useEffect(() => {
     const i = setInterval(() => !document.hidden && editing === undefined && !importing && refresh(), 60_000);
     return () => clearInterval(i);
@@ -217,6 +273,7 @@ export function Desk() {
                   className="bg-[#1f7a4d] text-white hover:bg-[#25915b]"
                   onClick={() => {
                     const next = unsent[0];
+                    if (next.channel === 'whatsapp') return sendWithCard(next);
                     window.open(sendHref(next), '_blank', 'noopener');
                     markSent(next, next.channel);
                   }}
@@ -234,7 +291,17 @@ export function Desk() {
                   {guests.length ? 'No guests match this filter.' : 'No guests yet. Add your first guest or import your list from a spreadsheet.'}
                 </p>
               ) : (
-                rows.map((g) => <GuestRow key={g.id} g={g} onEdit={() => setEditing(g)} onSent={markSent} onDelivered={toggleDelivered} />)
+                rows.map((g) => (
+                  <GuestRow
+                    key={g.id}
+                    g={g}
+                    onEdit={() => setEditing(g)}
+                    onSent={markSent}
+                    onDelivered={toggleDelivered}
+                    onSendWhatsApp={() => sendWithCard(g)}
+                    onCard={cardSrc && getsCard(g) ? () => saveCard(g) : undefined}
+                  />
+                ))
               )}
             </div>
           </CardContent>
@@ -274,11 +341,15 @@ function GuestRow({
   onEdit,
   onSent,
   onDelivered,
+  onSendWhatsApp,
+  onCard,
 }: {
   g: Guest;
   onEdit: () => void;
   onSent: (g: Guest, via: string) => void;
   onDelivered: (g: Guest) => void;
+  onSendWhatsApp: () => void;
+  onCard?: () => void;
 }) {
   const st = stageOf(g);
   const href = sendHref(g);
@@ -313,8 +384,12 @@ function GuestRow({
           <Button size="sm" variant="outline" className="border-gold/40 bg-transparent text-gold" onClick={() => onDelivered(g)}>
             {g.cardDelivered ? 'Card given ✓' : 'Mark card given'}
           </Button>
+        ) : href && g.channel === 'whatsapp' ? (
+          <Button size="sm" className="bg-[#1f7a4d] text-white hover:bg-[#25915b]" onClick={onSendWhatsApp}>
+            <Send /> {g.sentAt ? 'Resend' : 'Send'} · WhatsApp
+          </Button>
         ) : href ? (
-          <Button asChild size="sm" className={g.channel === 'whatsapp' ? 'bg-[#1f7a4d] text-white hover:bg-[#25915b]' : ''}>
+          <Button asChild size="sm">
             <a href={href} target="_blank" rel="noopener" onClick={() => onSent(g, g.channel)}>
               <Send /> {g.sentAt ? 'Resend' : 'Send'} · {CHANNEL_LABEL[g.channel]}
             </a>
@@ -338,6 +413,17 @@ function GuestRow({
         <Button size="sm" variant="outline" className="border-gold/40 bg-transparent text-gold" onClick={() => copy(g.link, 'Invitation link copied')}>
           <Link2 /> Link
         </Button>
+        {onCard && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-gold/40 bg-transparent text-gold"
+            onClick={onCard}
+            title="Download their personalised invitation card"
+          >
+            <ImageDown /> Card
+          </Button>
+        )}
       </div>
     </div>
   );

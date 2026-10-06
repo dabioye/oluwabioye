@@ -124,7 +124,7 @@ On private invitations each guest's name is written into the traditional card; l
 ## Sending traditional invitations
 
 1. Import your list (`guest-template.csv` shows the columns) or add guests one by one.
-2. Filter **Not sent** and tap **Send next on WhatsApp**. The message reminds guests the link is personal. Guests who lose the link can type their code (the last 6 characters of the link) on `oluwabioye.dabioye.com`.
+2. Filter **Not sent** and tap **Send next on WhatsApp** (or **Send · WhatsApp** on a guest). Guests invited to the traditional wedding get their **personalised card** (their name and access code on the card) with the message: on a phone the share sheet opens with the card and message together, so pick WhatsApp; on a laptop the card downloads and WhatsApp opens with the message, so attach the card in the chat. **Card** downloads a guest's card on its own. The message reminds guests the link is personal. Guests who lose the link can type their code (the last 6 characters of the link) on `oluwabioye.dabioye.com`.
 3. For printed cards, set *Send via → Printed card* and tick **Card given**.
 4. Chase **Sent, not opened** and **Opened, no reply** before the RSVP date.
 

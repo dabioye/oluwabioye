@@ -44,8 +44,8 @@ module.exports = {
   },
 
   colours: [
-    { name: 'Navy', hex: '#14213A' },
-    { name: 'Champagne Gold', hex: '#C9A56B' },
+    { name: 'Navy Blue', hex: '#14213A' },
+    { name: 'Champagne', hex: '#C9A56B' },
   ],
 
   rsvpBy: '2026-11-30',

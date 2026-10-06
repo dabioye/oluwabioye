@@ -113,7 +113,8 @@ test('the couple signs in, adds a guest and edits the website', async ({ page })
   await page.getByLabel('WhatsApp / phone').fill('08012345678');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('button', { name: /Kemi Adeyemi/ })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Send · WhatsApp/ }).first()).toHaveAttribute('href', /wa\.me\/2348012345678/);
+  await expect(page.getByRole('button', { name: /Send · WhatsApp/ }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Card' }).first()).toBeVisible();
 
   await page.goto(`${PUBLIC}/admin/site`);
   await page.getByLabel('Welcome note under your names').fill('We can’t wait to celebrate with you.');
@@ -138,4 +139,33 @@ test('ushers check guests in at the gate', async ({ page, request }) => {
   // Scanning the same card again is flagged.
   await page.goto(`${INVITE}/c/${g.code}`);
   await expect(page.getByText('Already checked in')).toBeVisible();
+});
+
+test('sending on WhatsApp from a phone shares the personalised card with the message', async ({ page, request }) => {
+  const g = await addGuest(request, { name: 'Funke Bello', phone: '08066666666' });
+  // Stand-in for the phone's share sheet: record what would go to WhatsApp.
+  await page.addInitScript(() => {
+    const w = window as unknown as { shared: unknown[] };
+    w.shared = [];
+    Object.assign(navigator, {
+      canShare: () => true,
+      share: async (d: { files: File[]; text: string }) => {
+        w.shared.push({ text: d.text, files: d.files.map((f) => ({ name: f.name, type: f.type, size: f.size })) });
+      },
+    });
+  });
+  await page.goto(`${PUBLIC}/admin`);
+  await page.getByLabel('Password').fill('test-admin');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  const row = page
+    .locator('div', { hasText: 'Funke Bello' })
+    .filter({ has: page.getByRole('button', { name: /Send · WhatsApp/ }) })
+    .last();
+  await row.getByRole('button', { name: /Send · WhatsApp/ }).click();
+  await expect(page.getByText('Marked as sent to Funke Bello')).toBeVisible();
+  const shared = await page.evaluate(() => (window as unknown as { shared: { text: string; files: { name: string; type: string; size: number }[] }[] }).shared);
+  expect(shared).toHaveLength(1);
+  expect(shared[0].text).toContain(`/i/${g.code}`);
+  expect(shared[0].files[0]).toMatchObject({ name: 'Invitation - Funke Bello.jpg', type: 'image/jpeg' });
+  expect(shared[0].files[0].size).toBeGreaterThan(50_000);
 });
