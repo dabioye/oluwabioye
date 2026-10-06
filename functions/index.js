@@ -1,4 +1,4 @@
-// Firebase entry point: the whole Express app runs as one HTTPS function behind Firebase Hosting.
+// Firebase entry point: the JSON API behind both static sites (see firebase.json rewrites).
 process.env.STORE = 'firestore';
 
 const { onRequest } = require('firebase-functions/v2/https');
@@ -9,7 +9,7 @@ const secrets = ['ADMIN_PASSWORD', 'CHECKIN_PIN', 'SESSION_SECRET'].map(defineSe
 
 const app = require('./server');
 
-exports.app = onRequest(
+exports.api = onRequest(
   { region: 'europe-west1', secrets, memory: '256MiB', concurrency: 40, maxInstances: 5, timeoutSeconds: 30 },
   app,
 );

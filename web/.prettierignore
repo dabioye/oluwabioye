@@ -1,0 +1,11 @@
+dist
+node_modules
+test-results
+playwright-report
+# shadcn/ui components are kept as upstream ships them
+components/ui
+lib/art-paths.ts
+package-lock.json
+# Next.js rewrites these itself
+tsconfig.json
+next-env.d.ts

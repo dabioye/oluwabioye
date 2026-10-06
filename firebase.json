@@ -1,14 +1,54 @@
 {
-  "hosting": {
-    "site": "sarahanddamilare",
-    "public": "public",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "headers": [
-      { "source": "/img/**", "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }] },
-      { "source": "**/*.@(css|js)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }] }
-    ],
-    "rewrites": [{ "source": "**", "function": { "functionId": "app", "region": "europe-west1" } }]
-  },
+  "hosting": [
+    {
+      "target": "public",
+      "public": "web/dist/public",
+      "cleanUrls": true,
+      "trailingSlash": false,
+      "ignore": ["firebase.json", "**/.*"],
+      "headers": [
+        { "source": "/_next/static/**", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
+        { "source": "/img/**", "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }] },
+        { "source": "**", "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }, { "key": "Referrer-Policy", "value": "same-origin" }] }
+      ],
+      "redirects": [
+        { "source": "/i/:code", "destination": "https://oluwabioye.dabioye.com/i/:code", "type": 301 },
+        { "source": "/c/:code", "destination": "https://oluwabioye.dabioye.com/c/:code", "type": 301 },
+        { "source": "/checkin", "destination": "https://oluwabioye.dabioye.com/checkin", "type": 302 }
+      ],
+      "rewrites": [
+        { "source": "/api/**", "function": { "functionId": "api", "region": "europe-west1" } },
+        { "source": "/media/**", "function": { "functionId": "api", "region": "europe-west1" } },
+        { "source": "/calendar/**", "function": { "functionId": "api", "region": "europe-west1" } }
+      ]
+    },
+    {
+      "target": "invite",
+      "public": "web/dist/invite",
+      "cleanUrls": true,
+      "trailingSlash": false,
+      "ignore": ["firebase.json", "**/.*"],
+      "headers": [
+        { "source": "/_next/static/**", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
+        { "source": "/img/**", "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }] },
+        {
+          "source": "**",
+          "headers": [
+            { "key": "X-Content-Type-Options", "value": "nosniff" },
+            { "key": "Referrer-Policy", "value": "same-origin" },
+            { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+          ]
+        }
+      ],
+      "rewrites": [
+        { "source": "/api/**", "function": { "functionId": "api", "region": "europe-west1" } },
+        { "source": "/media/**", "function": { "functionId": "api", "region": "europe-west1" } },
+        { "source": "/calendar/**", "function": { "functionId": "api", "region": "europe-west1" } },
+        { "source": "/i/**", "destination": "/i.html" },
+        { "source": "/c/**", "destination": "/c.html" }
+      ]
+    }
+  ],
   "functions": [
     {
       "source": "functions",
@@ -21,8 +61,7 @@
   "emulators": {
     "functions": { "port": 5001 },
     "firestore": { "port": 8080 },
-    "hosting": {
-    "site": "sarahanddamilare", "port": 5000 },
+    "hosting": { "port": 5000 },
     "ui": { "enabled": true }
   }
 }

@@ -1,20 +1,21 @@
 # Sarah & Damilare · Wedding site and invitation desk
 
-| URL | Who | What |
+Two static websites (Next.js + Tailwind + shadcn/ui) on Firebase Hosting, with one Cloud Function as the JSON API and Firestore for data.
+
+| Address | Who | What |
 | --- | --- | --- |
-| `/` | **Public** | Church wedding website: 10 AM ceremony at RCCG Garden of Peace, directions, add-to-calendar, story, colours, link to your **Joy gift registry**, contacts. No traditional-wedding details and no RSVP appear here. |
-| `/i/CODE` | **Private**, only people you send a link to | Traditional wedding & reception invitation with the guest's name, RSVP, QR **access card** and **driver meal card**. Not linked anywhere, `noindex`, blocked in `robots.txt`, unguessable 6-character codes. |
-| `/admin` | You two + planners | Invitation desk: traditional guest list, WhatsApp sending, sent → opened → RSVP → arrived tracking, CSV import/export. (The church RSVP list stays empty while the public RSVP is off: `churchRsvp.open` in `config.js`.) |
-| `/checkin` | Ushers | Gate check-in for the traditional wedding: scan QR or search name. Ushers can't see the guest list. |
+| `sarahanddamilare.dabioye.com` | **Public** | Church wedding website: ceremony details, directions, add-to-calendar, Our Story, gallery, the printed church invitation, **Joy gift registry**, contacts. No traditional-wedding details and no RSVP. |
+| `sarahanddamilare.dabioye.com/admin` | You two + planners | Invitation desk (guest list, WhatsApp sending, sent → opened → RSVP → arrived tracking, CSV import/export) and **Edit website**. |
+| `oluwabioye.dabioye.com` | Invited guests | Front page asks for the **6-character invitation code** (with "Remember me on this device"). Nothing about the event shows without a code. |
+| `oluwabioye.dabioye.com/i/CODE` | One guest | Their traditional wedding & reception invitation with their name on the card, RSVP, QR **access card** and **driver meal card**. |
+| `oluwabioye.dabioye.com/checkin` | Ushers | Gate check-in: scan the QR or search a name. Ushers can't see the guest list. |
 
-## Two domains
+### How it fits together
 
-| Domain | Shows |
-| --- | --- |
-| `sarahanddamilare.dabioye.com` (`BASE_URL`) | Public church-wedding site (no RSVP), `/admin` |
-| `oluwabioye.dabioye.com` (`INVITE_URL`) | Only personal invitations `/i/CODE`, access-card QR `/c/CODE` and the gate `/checkin`. Its front page just says "strictly by invitation". |
-
-One Firebase Hosting site serves both: the app looks at the domain of each request. Invitation links on the public domain redirect to the invite domain. If `INVITE_URL` is not set, everything runs on one domain (handy for `*.web.app` and local dev).
+- `web/` — the Next.js app, exported as **two static sites**. Pages named `page.public.tsx` go only to the public site, `page.invite.tsx` only to the invite site, `*.shared.tsx` to both. Files in `web/site-assets/<site>/` are copied into that site only (the traditional invitation card never ships on the public domain).
+- `functions/` — the API (`/api/**`, `/media/**`, `/calendar/**`), reached through Firebase Hosting rewrites on both sites. `functions/src/config.js` holds the wedding details for both the API and the pages.
+- `firebase.json` — two Hosting targets: `public` → site `sarahanddamilare`, `invite` → site `oluwabioye-invite` (see `.firebaserc`). Every `/i/CODE` and `/c/CODE` is served by one static page that reads the code in the browser.
+- Wrong invitation codes are limited to 10 per visitor per 15 minutes (counted in Firestore); right codes never count.
 
 ## Hosting on Firebase (project `sarahanddamilare`, Blaze plan)
 
@@ -35,13 +36,13 @@ Or in the browser: Google Cloud console → Security → **Secret Manager** → 
 
 ### Custom domains (DNS at Namecheap)
 
-Firebase console → Hosting → **Add custom domain**, once for `sarahanddamilare.dabioye.com` and once for `oluwabioye.dabioye.com`. Both go on the same Hosting site; the app picks the public or invite-only pages from the domain.
+Each domain belongs to its own Hosting site: in the Firebase console → Hosting, open site **sarahanddamilare** → **Add custom domain** → `sarahanddamilare.dabioye.com`, and site **oluwabioye-invite** → `oluwabioye.dabioye.com`.
 
 In Namecheap → Domain List → `dabioye.com` → **Manage** → **Advanced DNS**, add the records Firebase shows (usually an **A** record and a **TXT** record per subdomain, sometimes an `_acme-challenge` record). In the **Host** field type only the part before the domain (`sarahanddamilare`, `oluwabioye`, `_acme-challenge.oluwabioye`), not the full name. Delete any old record for the same host first. Back in Firebase click **Verify**; SSL is issued automatically, usually within an hour (up to 24 h).
 
 ### Auto-deploy from GitHub
 
-`.github/workflows/deploy.yml` runs the tests on every push to `main` and deploys when the repo has a `FIREBASE_SERVICE_ACCOUNT` secret (it does). To set it up again, e.g. for a new project:
+`.github/workflows/deploy.yml` runs every check on each pull request and push (API tests, lint, types, unit tests, both builds and browser tests), and deploys on pushes to `main` when the repo has a `FIREBASE_SERVICE_ACCOUNT` secret (it does). **Actions → Test and deploy to Firebase → Run workflow** deploys by hand; the optional *What to deploy* box takes a `firebase deploy --only` value such as `hosting:invite`. To set it up again, e.g. for a new project:
 
 1. Google Cloud console → IAM & Admin → **Service accounts** → create `github-deploy` with these roles:
    **Firebase Admin**, **Cloud Functions Admin**, **Cloud Run Admin**, **Service Account User**, **Secret Manager Admin**, **Artifact Registry Administrator**, **Service Usage Consumer**.
@@ -64,6 +65,7 @@ npm install -g firebase-tools@15
 firebase login --reauth
 
 cd functions && npm ci && cp .env.example .env && cd ..
+cd web && npm ci && npm run build && cd ..
 firebase deploy --only hosting,functions,firestore --project sarahanddamilare
 ```
 
@@ -87,20 +89,29 @@ Sign in at `/admin` → **Edit website**. From your phone you can:
 - set the Joy registry link and message, RSVP deadline (shown on private invitations), notes for church guests
 - turn the wax-seal opening on or off
 
-Changes go live within about 15 seconds. `functions/src/config.js` still holds the fixed details (names, venues, times) and the defaults.
+Changes go live within about a minute (the pages cache the content briefly). `functions/src/config.js` still holds the fixed details (names, venues, times) and the defaults.
 
 ## Local development
 
+Needs Node 22.
+
 ```bash
-cd functions && npm install
-cp .env.local.example .env.local
-npm run dev                   # http://localhost:3000, data in ./data/guests.json
-npm test                      # end-to-end smoke test (JSON store)
-npm run test:firestore        # same test against the Firestore emulator
-firebase emulators:start      # full Hosting + Functions + Firestore locally
+cd functions && npm ci && cd ../web && npm ci
+
+npm run dev        # hot reload: public site http://localhost:3000, invite site http://localhost:3001
+npm run preview    # build both sites, then serve them exactly as Firebase Hosting would
 ```
 
-The app also still runs on any plain Node host (`STORE=json node server.js`).
+Locally the admin password is `dev-password` and the gate PIN is `1234`; data goes to `./data/guests.json`. `web/scripts/serve.mjs` reads the real `firebase.json`, so redirects and rewrites behave as they do on Firebase.
+
+Checks (all run in GitHub Actions too):
+
+```bash
+cd functions && npm test           # API tests (npm run test:firestore runs them on the Firestore emulator)
+cd web && npm run lint && npm run typecheck && npm run format:check
+cd web && npm test                 # unit tests
+cd web && npm run build && npm run test:e2e   # browser tests against both built sites
+```
 
 ## Editing details
 
@@ -108,15 +119,24 @@ Everything is in `functions/src/config.js`: families, events, venues, map links,
 
 ## Invitation card name slot
 
-On private invitations each guest's name is written into the traditional card. If you upload a new card design, leave that space empty; adjust `invitationArt.nameSlot` in `config.js` if the name sits too high or low.
+On private invitations each guest's name is written into the traditional card; long names go on two smaller lines. If you upload a new card design, leave that space empty; adjust `invitationArt.nameSlot` in `config.js` if the name sits too high or low.
 
 ## Sending traditional invitations
 
 1. Import your list (`guest-template.csv` shows the columns) or add guests one by one.
-2. Filter **Not sent** and tap **Send next on WhatsApp**. The message reminds guests the link is personal.
+2. Filter **Not sent** and tap **Send next on WhatsApp**. The message reminds guests the link is personal. Guests who lose the link can type their code (the last 6 characters of the link) on `oluwabioye.dabioye.com`.
 3. For printed cards, set *Send via → Printed card* and tick **Card given**.
 4. Chase **Sent, not opened** and **Opened, no reply** before the RSVP date.
 
 ## On the day
 
 Give ushers `/checkin` and the PIN. Green = welcome, amber = card already used, red = not on the list or declined.
+
+## Switching from the old single site (one time)
+
+The old site ran everything from one Hosting site and a function called `app`. The new one uses two Hosting sites and a function called `api`. To switch without breaking invitation links:
+
+1. **Create the invite site:** `firebase hosting:sites:create oluwabioye-invite --project sarahanddamilare` (or Firebase console → Hosting → *Add another site*).
+2. **Deploy the API and the invite site only:** Actions → Run workflow on this branch with *What to deploy* = `functions:api,hosting:invite`. The old site keeps working (it still uses `app`). Test at `https://oluwabioye-invite.web.app`.
+3. **Move the invite domain:** Firebase console → Hosting → site *sarahanddamilare* → remove `oluwabioye.dabioye.com`; then site *oluwabioye-invite* → *Add custom domain* → `oluwabioye.dabioye.com`, and update the Namecheap records it shows. Wait for **Connected**. (Links on that domain may not open until the certificate is issued, usually under an hour.)
+4. **Merge the pull request.** The push to `main` deploys everything: the new public site goes live and the old `app` function is removed.

@@ -1,5 +1,5 @@
 // Site content that can be edited from /admin/site. Defaults come from config.js;
-// saved edits are merged over them at request time (cached briefly per instance).
+// saved edits are merged over them when read (cached briefly per instance).
 const cfg = require('./config');
 const store = require('./store');
 
@@ -41,18 +41,30 @@ async function current() {
   return cache;
 }
 
-// Copy the current content onto the shared config object the page templates read.
-async function apply() {
-  const c = await current();
-  cfg.hero = { ...cfg.hero, ...c.hero };
-  cfg.story = c.story;
-  cfg.gallery = c.gallery;
-  cfg.registryUrl = c.registryUrl;
-  cfg.gifts = { ...cfg.gifts, message: c.giftsMessage };
-  cfg.publicNotes = c.publicNotes;
-  cfg.rsvpBy = c.rsvpBy;
-  cfg.invitationArt = { ...cfg.invitationArt, church: c.invitationArt.church || defaults.invitationArt.church, trad: c.invitationArt.trad || defaults.invitationArt.trad };
-  cfg.intro = c.intro;
+// What the public church site may see. Nothing about the traditional wedding goes in here.
+function publicView(c) {
+  return {
+    hero: { photo: c.hero?.photo || '', note: c.hero?.note || '' },
+    story: c.story || [],
+    gallery: c.gallery || [],
+    registryUrl: c.registryUrl || '',
+    giftsMessage: c.giftsMessage || '',
+    publicNotes: c.publicNotes || [],
+    rsvpBy: c.rsvpBy,
+    invitationArt: { church: c.invitationArt?.church || defaults.invitationArt.church },
+    intro: { home: c.intro?.home !== false },
+  };
+}
+
+// Extra content for a private traditional-wedding invitation.
+function inviteView(c) {
+  return {
+    art: c.invitationArt?.trad || defaults.invitationArt.trad,
+    nameSlot: cfg.invitationArt.nameSlot,
+    notes: cfg.notes,
+    rsvpBy: c.rsvpBy,
+    intro: c.intro?.invite !== false,
+  };
 }
 
 async function save(input) {
@@ -62,4 +74,4 @@ async function save(input) {
   return { ...defaults, ...merged };
 }
 
-module.exports = { apply, current, save, sanitize, defaults };
+module.exports = { current, save, sanitize, publicView, inviteView, defaults };

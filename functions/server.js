@@ -1,22 +1,22 @@
+// JSON API behind the two static sites. Firebase Hosting serves the pages and forwards
+// /api/**, /media/** and /calendar/** here:
+//  - public site (BASE_URL):  church wedding pages, /admin
+//  - invite site (INVITE_URL): code entry, private invitations /i/CODE, access-card QR /c/CODE, gate /checkin
 const express = require('express');
 const crypto = require('crypto');
-const path = require('path');
 const QRCode = require('qrcode');
 
 const cfg = require('./src/config');
 const store = require('./src/store');
 const content = require('./src/content');
-const pages = require('./src/pages');
-const { adminPage, sitePage, loginPage, checkinPage, checkinResultPage } = require('./src/staff');
+const { weekday, longDate } = require('./src/dates');
 const { parseCsv, toCsv } = require('./src/csv');
 
 const PORT = process.env.PORT || 3000;
 const env = (k) => process.env[k] || '';
 const BASE_URL = () => (env('BASE_URL') || `http://localhost:${PORT}`).replace(/\/$/, '');
-// Private traditional-wedding site (e.g. https://oluwabioye.dabioye.com). Falls back to BASE_URL.
 const INVITE_URL = () => (env('INVITE_URL') || BASE_URL()).replace(/\/$/, '');
 const hostOf = (u) => { try { return new URL(u).hostname; } catch { return ''; } };
-const onInviteHost = (req) => !!env('INVITE_URL') && req.hostname === hostOf(INVITE_URL()) && hostOf(INVITE_URL()) !== hostOf(BASE_URL());
 // Read secrets lazily: on Firebase they are injected at request time.
 let devSecret;
 const SECRET = () => env('SESSION_SECRET') || (devSecret ||= crypto.randomBytes(32).toString('hex'));
@@ -24,57 +24,26 @@ const SECRET = () => env('SESSION_SECRET') || (devSecret ||= crypto.randomBytes(
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', true);
-app.use(express.urlencoded({ extended: false, limit: '2mb' }));
 app.use(express.json({ limit: '2mb' }));
 app.use((req, res, next) => {
   res.set('X-Content-Type-Options', 'nosniff');
   res.set('Referrer-Policy', 'same-origin');
-  res.set('X-Frame-Options', 'DENY');
-  // Dynamic pages must never be cached by the Firebase CDN.
+  // API answers are personal unless a route says otherwise, so the Firebase CDN must not cache them.
   res.set('Cache-Control', 'private, no-store');
   next();
 });
-// Locally we serve /public ourselves; on Firebase, Hosting serves it before requests reach here.
-app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: '1h' }));
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-
-// Uploaded photos. Ids are random and never reused, so the CDN can cache them for a year.
-app.get('/media/:id', wrap(async (req, res) => {
-  const id = String(req.params.id);
-  if (!/^[a-f0-9]{20}\.(jpg|png|webp)$/.test(id)) return res.sendStatus(404);
-  const m = await store.readMedia(id);
-  if (!m) return res.sendStatus(404);
-  res.set('Cache-Control', 'public, max-age=31536000, immutable').type(id.split('.').pop()).send(m.buf);
-}));
-
-// Load editable site content (admin-edited text and photos) before rendering any page.
-app.use(wrap(async (req, res, next) => { await content.apply(); next(); }));
-
-// Two front doors, one app:
-//  - public site (BASE_URL): church wedding, RSVP, admin
-//  - invite site (INVITE_URL): only personal invitations, access-card QR and the gate
-app.use((req, res, next) => {
-  if (!env('INVITE_URL') || hostOf(INVITE_URL()) === hostOf(BASE_URL())) return next();
-  const p = req.path;
-  const inviteOnly = /^\/(i|c)\//.test(p);
-  if (onInviteHost(req)) {
-    if (p === '/robots.txt') return res.type('text/plain').send('User-agent: *\nDisallow: /\n');
-    if (inviteOnly || p.startsWith('/checkin') || p.startsWith('/api/checkin') || p === '/logout') return next();
-    return res.status(p === '/' ? 200 : 404).send(pages.privateLanding());
-  }
-  if (inviteOnly) return res.redirect(301, INVITE_URL() + req.originalUrl);
-  next();
-});
 
 // ---------- sessions ----------
 // Firebase Hosting strips every cookie except one named "__session", so that's the name we use.
 const COOKIE = '__session';
 const sign = (v) => crypto.createHmac('sha256', SECRET()).update(v).digest('base64url');
-function issue(res, role, days) {
+function issue(req, res, role, days) {
   const exp = Date.now() + days * 864e5;
   const val = `${role}.${exp}`;
-  res.cookie(COOKIE, `${val}.${sign(val)}`, { httpOnly: true, sameSite: 'lax', secure: BASE_URL().startsWith('https'), maxAge: days * 864e5, path: '/' });
+  const secure = req.secure || BASE_URL().startsWith('https');
+  res.cookie(COOKIE, `${val}.${sign(val)}`, { httpOnly: true, sameSite: 'lax', secure, maxAge: days * 864e5, path: '/' });
 }
 function roleOf(req) {
   const m = new RegExp(`(?:^|;\\s*)${COOKIE}=([^;]+)`).exec(req.headers.cookie || '');
@@ -88,10 +57,11 @@ function roleOf(req) {
 }
 const isAdmin = (req) => roleOf(req) === 'admin';
 const isStaff = (req) => ['admin', 'checkin'].includes(roleOf(req));
-const needAdmin = (req, res, next) => (isAdmin(req) ? next() : req.originalUrl.startsWith('/api') ? res.status(401).json({ error: 'Sign in again' }) : res.redirect('/admin/login'));
+const needAdmin = (req, res, next) => (isAdmin(req) ? next() : res.status(401).json({ error: 'Sign in again' }));
 const needStaff = (req, res, next) => (isStaff(req) ? next() : res.status(401).json({ error: 'Sign in again' }));
+const safeEq = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a)).digest(), crypto.createHash('sha256').update(String(b)).digest());
 
-// Small per-instance rate limiter for guessable endpoints.
+// Small per-instance limiter for password and PIN attempts.
 const hits = new Map();
 function limit(max, windowMs) {
   return (req, res, next) => {
@@ -101,65 +71,54 @@ function limit(max, windowMs) {
     h.push(t);
     hits.set(key, h);
     if (hits.size > 5000) hits.clear();
-    if (h.length > max) return res.status(429).send(pages.simple('Slow down a little', 'Too many attempts. Please wait a minute and try again.'));
+    if (h.length > max) return res.status(429).json({ error: 'Too many attempts. Please wait a minute and try again.' });
     next();
   };
 }
-const safeEq = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a)).digest(), crypto.createHash('sha256').update(String(b)).digest());
+
+// Invitation codes can be typed in by hand, so wrong codes are counted per visitor in the store
+// (shared by every function instance). Right codes never count, so guests are not slowed down.
+const CODE_MISSES = { max: 10, windowMs: 15 * 60e3 };
+const missKey = (req) => 'code-' + crypto.createHash('sha256').update(`${SECRET()}|${req.ip}`).digest('hex').slice(0, 32);
+const TOO_MANY = 'Too many codes tried. Please wait 15 minutes, or message Busayo or Hope for your link.';
+async function lookupCode(req, raw) {
+  const key = missKey(req);
+  if ((await store.attempts(key)) >= CODE_MISSES.max) return { limited: true };
+  const g = await store.byCode(raw);
+  if (!g) await store.addAttempt(key, CODE_MISSES.windowMs);
+  return { guest: g };
+}
 
 // ---------- helpers ----------
 const inviteLink = (g) => `${INVITE_URL()}/i/${g.code}`;
 const qrSvg = (text) => QRCode.toString(text, { type: 'svg', margin: 0, errorCorrectionLevel: 'M', color: { dark: '#0f1a2e', light: '#f5eee2' } });
 const message = (g) =>
-  cfg.inviteMessage.replaceAll('{name}', g.name).replaceAll('{link}', inviteLink(g)).replaceAll('{weekday}', pages.weekday()).replaceAll('{rsvpBy}', pages.longDate(cfg.rsvpBy));
+  cfg.inviteMessage.replaceAll('{name}', g.name).replaceAll('{link}', inviteLink(g)).replaceAll('{weekday}', weekday()).replaceAll('{rsvpBy}', longDate(cfg.rsvpBy));
 const publicGuest = (g) => ({ ...g, link: inviteLink(g), message: message(g) });
+// What a guest sees about themselves on their invitation.
+const inviteGuest = (g) => ({ name: g.name, code: g.code, events: g.events, rsvp: g.rsvp, rsvpNote: g.rsvpNote, driverCard: !!g.driverCard });
+const onPublicHost = (req) => !!env('INVITE_URL') && hostOf(INVITE_URL()) !== hostOf(BASE_URL()) && req.hostname === hostOf(BASE_URL());
 
-// ---------- public: church wedding ----------
-app.get('/', (req, res) => res.send(pages.home()));
-app.get('/invitation', (req, res) => res.send(pages.invitationPage()));
-app.get('/our-story', (req, res) => res.send(pages.storyPage()));
-
-app.post('/rsvp', limit(10, 60_000), wrap(async (req, res) => {
-  if (cfg.churchRsvp.open === false) return res.redirect(303, '/');
-  if (req.body.website) return res.send(pages.home({ rsvp: { done: true, attending: 'yes' } })); // bot trap
-  try {
-    const r = await store.savePublicRsvp(req.body);
-    res.send(pages.home({ rsvp: { done: true, attending: req.body.attending, updated: r.updated } }));
-  } catch (e) {
-    res.status(400).send(pages.home({ rsvp: { error: e.message }, form: req.body }));
-  }
+// ---------- public ----------
+// Uploaded photos. Ids are random and never reused, so the CDN can cache them for a year.
+app.get('/media/:id', wrap(async (req, res) => {
+  const id = String(req.params.id);
+  if (!/^[a-f0-9]{20}\.(jpg|png|webp)$/.test(id)) return res.sendStatus(404);
+  const m = await store.readMedia(id);
+  if (!m) return res.sendStatus(404);
+  res.set('Cache-Control', 'public, max-age=31536000, immutable').type(id.split('.').pop()).send(m.buf);
 }));
 
-app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /i/\nDisallow: /c/\nDisallow: /admin\nDisallow: /checkin\nDisallow: /api/\n'));
-
-// ---------- private: traditional wedding invitations ----------
-app.get('/i/:code', limit(60, 60_000), wrap(async (req, res) => {
-  let g = await store.byCode(req.params.code);
-  if (!g) return res.status(404).send(pages.simple('Invitation not found', 'This link doesn’t match an invitation. Please check the link you received, or contact Busayo or Hope.'));
-  if (!isStaff(req)) g = (await store.markOpened(g)) || g;
-  res.send(pages.invite({ guest: g, qrSvg: await qrSvg(`${INVITE_URL()}/c/${g.code}`), justSaved: req.query.saved === '1' }));
-}));
-
-app.post('/i/:code/rsvp', limit(20, 60_000), wrap(async (req, res) => {
-  const g = await store.byCode(req.params.code);
-  if (!g) return res.status(404).send(pages.simple('Invitation not found', 'This link doesn’t match an invitation.'));
-  await store.setRsvp(g, req.body.response === 'no' ? 'no' : 'yes', req.body.note);
-  res.redirect(303, `/i/${g.code}?saved=1#respond`);
-}));
-
-// The QR on the access card points here. Signed-in ushers get the check-in result; anyone else sees the invite.
-app.get('/c/:code', wrap(async (req, res) => {
-  const g = await store.byCode(req.params.code);
-  if (!isStaff(req)) return res.redirect(g ? `/i/${g.code}` : '/');
-  if (!g) return res.send(checkinResultPage({ status: 'missing', code: req.params.code }));
-  if (g.rsvp === 'no') return res.send(checkinResultPage({ status: 'declined', guest: g }));
-  const already = await store.checkIn(g);
-  res.send(checkinResultPage({ status: already ? 'repeat' : 'ok', guest: g, already }));
+// Editable content for the public pages (couple photo, story, gallery, registry…). Cached briefly at the CDN.
+app.get('/api/content', wrap(async (req, res) => {
+  res.set('Cache-Control', 'public, max-age=30, s-maxage=60');
+  res.json(content.publicView(await content.current()));
 }));
 
 app.get('/calendar/:key.ics', (req, res) => {
   const ev = cfg.events[req.params.key];
-  if (!ev) return res.sendStatus(404);
+  // The traditional wedding is private: its calendar file is only offered from the invite site.
+  if (!ev || (ev.key === 'trad' && onPublicHost(req))) return res.sendStatus(404);
   const start = new Date(ev.startsAt);
   const end = new Date(start.getTime() + 3 * 3600e3);
   const f = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -168,26 +127,71 @@ app.get('/calendar/:key.ics', (req, res) => {
     `UID:${ev.key}-${cfg.date}@sarahanddamilare`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(start)}`, `DTEND:${f(end)}`,
     `SUMMARY:${cfg.couple.bride} & ${cfg.couple.groom} · ${ev.name}`,
     `LOCATION:${[ev.venue, ev.venueLine2, ev.address].join(', ').replace(/,/g, '\\,')}`,
-    `URL:${BASE_URL()}`, 'END:VEVENT', 'END:VCALENDAR',
+    `URL:${ev.key === 'trad' ? INVITE_URL() : BASE_URL()}`, 'END:VEVENT', 'END:VCALENDAR',
   ].join('\r\n');
   res.type('text/calendar').set('Content-Disposition', `attachment; filename="${ev.key}.ics"`).send(ics);
 });
 
-// ---------- admin ----------
-app.get('/admin/login', (req, res) => res.send(loginPage({ kind: 'admin' })));
-app.post('/admin/login', limit(8, 60_000), (req, res) => {
-  const pw = env('ADMIN_PASSWORD');
-  if (!pw || !safeEq(req.body.password || '', pw)) return res.status(401).send(loginPage({ kind: 'admin', error: pw ? 'That password didn’t work.' : 'ADMIN_PASSWORD isn’t set on the server yet.' }));
-  issue(res, 'admin', 30);
-  res.redirect('/admin');
-});
-app.get('/logout', (req, res) => {
-  res.clearCookie(COOKIE, { path: '/' });
-  res.redirect('/');
-});
-app.get('/admin', needAdmin, (req, res) => res.send(adminPage()));
-app.get('/admin/site', needAdmin, (req, res) => res.send(sitePage()));
+// Church RSVP (only while churchRsvp.open is true in config).
+app.post('/api/rsvp', limit(10, 60_000), wrap(async (req, res) => {
+  if (cfg.churchRsvp.open === false) return res.status(410).json({ error: 'RSVP is closed.' });
+  if (req.body.website) return res.json({ ok: true }); // bot trap
+  try { res.json(await store.savePublicRsvp(req.body)); } catch (e) { res.status(400).json({ error: e.message }); }
+}));
 
+// ---------- private invitations ----------
+// Code entry on the invite site's front page.
+app.post('/api/invite/lookup', wrap(async (req, res) => {
+  const r = await lookupCode(req, req.body.code);
+  if (r.limited) return res.status(429).json({ error: TOO_MANY });
+  if (!r.guest) return res.status(404).json({ error: 'We couldn’t find that code. Check the message you received, or contact Busayo or Hope.' });
+  res.json({ code: r.guest.code });
+}));
+
+app.get('/api/invite/:code', wrap(async (req, res) => {
+  const r = await lookupCode(req, req.params.code);
+  if (r.limited) return res.status(429).json({ error: TOO_MANY });
+  let g = r.guest;
+  if (!g) return res.status(404).json({ error: 'This link doesn’t match an invitation. Please check the link you received, or contact Busayo or Hope.' });
+  if (!isStaff(req)) g = (await store.markOpened(g)) || g;
+  res.json({
+    guest: inviteGuest(g),
+    qrSvg: await qrSvg(`${INVITE_URL()}/c/${g.code}`),
+    invite: content.inviteView(await content.current()),
+    publicUrl: BASE_URL(),
+  });
+}));
+
+app.post('/api/invite/:code/rsvp', limit(20, 60_000), wrap(async (req, res) => {
+  const g = await store.byCode(req.params.code);
+  if (!g) return res.status(404).json({ error: 'This link doesn’t match an invitation.' });
+  const updated = await store.setRsvp(g, req.body.response === 'no' ? 'no' : 'yes', req.body.note);
+  res.json({ guest: inviteGuest(updated) });
+}));
+
+// ---------- staff sign-in ----------
+app.get('/api/session', (req, res) => res.json({ role: roleOf(req) }));
+app.post('/api/login', limit(8, 60_000), (req, res) => {
+  const kind = req.body.kind === 'checkin' ? 'checkin' : 'admin';
+  const given = String(req.body.password || '');
+  const pw = env('ADMIN_PASSWORD');
+  const pin = env('CHECKIN_PIN');
+  if (kind === 'admin') {
+    if (!pw) return res.status(503).json({ error: 'ADMIN_PASSWORD isn’t set on the server yet.' });
+    if (!safeEq(given, pw)) return res.status(401).json({ error: 'That password didn’t work.' });
+    issue(req, res, 'admin', 30);
+    return res.json({ role: 'admin' });
+  }
+  if (!((pin && safeEq(given, pin)) || (pw && safeEq(given, pw)))) return res.status(401).json({ error: 'That PIN didn’t work.' });
+  issue(req, res, 'checkin', 3);
+  res.json({ role: 'checkin' });
+});
+app.post('/api/logout', (req, res) => {
+  res.clearCookie(COOKIE, { path: '/' });
+  res.json({ ok: true });
+});
+
+// ---------- admin ----------
 const api = express.Router();
 api.use(needAdmin);
 const guestOr404 = async (req, res) => {
@@ -197,7 +201,7 @@ const guestOr404 = async (req, res) => {
 };
 api.get('/guests', wrap(async (req, res) => {
   const [guests, activity, church] = await Promise.all([store.all(), store.activity(60), store.publicRsvps()]);
-  res.json({ guests: guests.map(publicGuest), activity, church, baseUrl: BASE_URL() });
+  res.json({ guests: guests.map(publicGuest), activity, church, baseUrl: BASE_URL(), inviteUrl: INVITE_URL() });
 }));
 api.post('/guests', wrap(async (req, res) => {
   try { res.json(publicGuest(await store.create(req.body))); } catch (e) { res.status(400).json({ error: e.message }); }
@@ -252,7 +256,7 @@ api.get('/qr/:id.svg', wrap(async (req, res) => {
   if (!g) return res.sendStatus(404);
   res.type('image/svg+xml').send(await qrSvg(`${INVITE_URL()}/c/${g.code}`));
 }));
-api.get('/site', wrap(async (req, res) => res.json(await content.current())));
+api.get('/site', wrap(async (req, res) => res.json({ ...(await content.current()), inviteUrl: INVITE_URL() })));
 api.put('/site', wrap(async (req, res) => res.json(await content.save(req.body))));
 api.post('/media', express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: '1mb' }), wrap(async (req, res) => {
   if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'Send a JPEG, PNG or WebP image under 1 MB.' });
@@ -262,15 +266,6 @@ api.post('/media', express.raw({ type: ['image/jpeg', 'image/png', 'image/webp']
 app.use('/api/admin', api);
 
 // ---------- gate check-in ----------
-app.get('/checkin', (req, res) => res.send(isStaff(req) ? checkinPage() : loginPage({ kind: 'checkin' })));
-app.post('/checkin/login', limit(8, 60_000), (req, res) => {
-  const pin = env('CHECKIN_PIN');
-  const pw = env('ADMIN_PASSWORD');
-  const given = req.body.password || '';
-  if (!((pin && safeEq(given, pin)) || (pw && safeEq(given, pw)))) return res.status(401).send(loginPage({ kind: 'checkin', error: 'That PIN didn’t work.' }));
-  issue(res, 'checkin', 3);
-  res.redirect('/checkin');
-});
 app.post('/api/checkin', needStaff, wrap(async (req, res) => {
   const raw = String(req.body.code || '').trim();
   const code = (raw.match(/\/c\/([A-Za-z0-9]+)/) || [, raw])[1];
@@ -296,15 +291,12 @@ app.get('/api/checkin/search', needStaff, wrap(async (req, res) => {
   res.json(all.filter((g) => g.name.toLowerCase().includes(q)).slice(0, 8).map((g) => ({ name: g.name, code: g.code, rsvp: g.rsvp, checkedInAt: g.checkedInAt, table: g.table })));
 }));
 
-app.use((req, res) => res.status(404).send(pages.simple('Page not found', 'That page doesn’t exist.')));
+app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
+app.use((req, res) => res.sendStatus(404));
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(500).send(pages.simple('Something went wrong', 'Please try again in a moment.'));
+  res.status(500).json({ error: 'Something went wrong. Please try again in a moment.' });
 });
 
-if (require.main === module) {
-  if (!env('ADMIN_PASSWORD')) console.warn('⚠  ADMIN_PASSWORD is not set. The admin area is locked until you set it.');
-  app.listen(PORT, () => console.log(`Wedding site on ${BASE_URL()}  (store: ${store.kind}; admin: /admin, gate: /checkin)`));
-}
 module.exports = app;

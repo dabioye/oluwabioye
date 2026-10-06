@@ -67,6 +67,7 @@ function jsonBackend() {
   const FILE = path.join(DATA_DIR, 'guests.json');
   let state = { guests: [], activity: [], publicRsvps: [], settings: {} };
   let queue = Promise.resolve();
+  const limits = new Map();
   fs.mkdirSync(DATA_DIR, { recursive: true });
   if (fs.existsSync(FILE)) state = { ...state, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) };
   const persistNow = () => { fs.writeFileSync(FILE + '.tmp', JSON.stringify(state, null, 2)); fs.renameSync(FILE + '.tmp', FILE); };
@@ -143,6 +144,18 @@ function jsonBackend() {
     async readMedia(id) {
       const f = path.join(DATA_DIR, 'media', path.basename(id));
       return fs.existsSync(f) ? { buf: fs.readFileSync(f) } : null;
+    },
+
+    // Attempt counters for the invitation-code limiter. In memory: the JSON store is a single process.
+    async attempts(key) {
+      const a = limits.get(key);
+      return a && a.resetAt > Date.now() ? a.count : 0;
+    },
+    async addAttempt(key, windowMs) {
+      const a = limits.get(key);
+      if (a && a.resetAt > Date.now()) a.count++;
+      else limits.set(key, { count: 1, resetAt: Date.now() + windowMs });
+      if (limits.size > 10000) limits.clear();
     },
   };
 }
@@ -251,6 +264,22 @@ function firestoreBackend() {
     async readMedia(id) {
       const d = data(await db.collection('media').doc(String(id)).get());
       return d ? { buf: Buffer.from(d.bytes) } : null;
+    },
+
+    // Attempt counters for the invitation-code limiter. Kept in Firestore so the limit holds across
+    // function instances. expireAt lets an optional Firestore TTL policy tidy old documents.
+    async attempts(key) {
+      const d = data(await db.collection('limits').doc(key).get());
+      return d && d.resetAt > Date.now() ? d.count : 0;
+    },
+    async addAttempt(key, windowMs) {
+      const ref = db.collection('limits').doc(key);
+      await db.runTransaction(async (tx) => {
+        const d = data(await tx.get(ref));
+        const t = Date.now();
+        if (d && d.resetAt > t) tx.update(ref, { count: d.count + 1 });
+        else tx.set(ref, { count: 1, resetAt: t + windowMs, expireAt: new Date(t + windowMs + 864e5) });
+      });
     },
   };
 }
