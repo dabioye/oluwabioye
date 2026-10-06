@@ -101,7 +101,7 @@ export function WhatsAppSendDialog({
         </DialogHeader>
 
         {phase === 'confirm' && (
-          <div className="grid gap-2 rounded-md bg-[#0b141a] p-3" aria-label="Message preview">
+          <div role="group" className="grid gap-2 rounded-md bg-[#0b141a] p-3" aria-label="Message preview">
             <div className="ml-auto grid max-w-[85%] gap-1.5 rounded-lg rounded-tr-none bg-[#005c4b] p-1.5 text-[0.85rem] text-[#e9edef]">
               {needsCard &&
                 (shown?.card ? (
@@ -109,7 +109,7 @@ export function WhatsAppSendDialog({
                   <img src={shown.card} alt={`Invitation card for ${first?.name}`} className="w-full rounded-md" />
                 ) : (
                   <div className="grid aspect-[2/3] w-full place-items-center rounded-md bg-black/20">
-                    <Loader2 className="animate-spin" aria-label="Preparing the card" />
+                    <Loader2 role="img" className="animate-spin" aria-label="Preparing the card" />
                   </div>
                 ))}
               <p className="m-0 px-1.5 pb-1 whitespace-pre-wrap">{shown ? shown.text || wa.template?.body : 'Preparing…'}</p>

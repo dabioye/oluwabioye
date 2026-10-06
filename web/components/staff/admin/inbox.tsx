@@ -162,7 +162,7 @@ function Conversation({ thread, onBack, onChanged }: { thread: string; onBack: (
 
   const left = windowLeft(c?.windowUntil ?? null);
   return (
-    <Card className="gap-0 border-hairline-soft bg-navy-2/60 py-0" aria-label={c ? `Conversation with ${c.name}` : 'Conversation'}>
+    <Card role="region" className="gap-0 border-hairline-soft bg-navy-2/60 py-0" aria-label={c ? `Conversation with ${c.name}` : 'Conversation'}>
       <div className="flex items-center gap-3 border-b border-hairline-soft px-4 py-3">
         <Button variant="ghost" size="icon" className="md:hidden" onClick={onBack} aria-label="Back to conversations">
           <ArrowLeft />
@@ -182,9 +182,9 @@ function Conversation({ thread, onBack, onChanged }: { thread: string; onBack: (
         </div>
       </div>
 
-      <div className="grid max-h-[60vh] min-h-64 content-start gap-2 overflow-y-auto bg-[#0b141a] px-3 py-4" aria-live="polite">
+      <div className="grid max-h-[60vh] min-h-64 content-start gap-2 overflow-y-auto bg-[#0b141a] px-3 py-4" role="log" aria-label="Messages">
         {!c ? (
-          <Loader2 className="mx-auto animate-spin text-gold" aria-label="Loading" />
+          <Loader2 role="img" className="mx-auto animate-spin text-gold" aria-label="Loading" />
         ) : (
           c.messages.map((m, i) => (
             <div key={m.id} className="contents">
@@ -244,7 +244,9 @@ function Bubble({ m }: { m: InboxMessage }) {
       <p className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">{m.text}</p>
       <small className="mt-0.5 flex items-center justify-end gap-1 text-[0.68rem] text-[#e9edef]/60">
         {clock(m.at)}
-        {out && <Tick className={cn('size-3.5', m.status === 'read' && 'text-[#53bdeb]', m.status === 'failed' && 'text-bad')} aria-label={m.status} />}
+        {out && (
+          <Tick className={cn('size-3.5', m.status === 'read' && 'text-[#53bdeb]', m.status === 'failed' && 'text-bad')} role="img" aria-label={m.status} />
+        )}
       </small>
       {m.status === 'failed' && m.error && <small className="block text-[0.7rem] text-bad">{m.error}</small>}
     </div>

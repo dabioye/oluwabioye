@@ -232,7 +232,8 @@ test('with WhatsApp Business, the desk sends each guest their card and message f
 
 test('guests’ WhatsApp replies arrive in the inbox, alert the couple, and can be answered', async ({ page, request }) => {
   const lara = await addGuest(page.request, { name: 'Lara Bello', phone: '0809 999 9999' });
-  // Meta delivers the reply to the webhook, signed with the app secret.
+  // Meta delivers the reply to the webhook, signed with the app secret (a fresh id each attempt, as Meta would).
+  const wamid = `wamid.lara.${Date.now()}`;
   const body = JSON.stringify({
     entry: [
       {
@@ -244,7 +245,7 @@ test('guests’ WhatsApp replies arrive in the inbox, alert the couple, and can 
               messages: [
                 {
                   from: '2348099999999',
-                  id: 'wamid.lara1',
+                  id: wamid,
                   timestamp: String(Math.floor(Date.now() / 1000)),
                   type: 'text',
                   text: { body: 'Thank you so much!\nWe’ll be there.' },
@@ -275,12 +276,13 @@ test('guests’ WhatsApp replies arrive in the inbox, alert the couple, and can 
   const item = page.getByRole('list', { name: 'Conversations' }).getByRole('button', { name: /Lara Bello/ });
   await expect(item).toContainText('1');
   await item.click();
-  const convo = page.getByLabel('Conversation with Lara Bello');
-  await expect(convo.getByText('We’ll be there.')).toBeVisible();
+  const convo = page.getByRole('region', { name: 'Conversation with Lara Bello' });
+  const messages = convo.getByRole('log', { name: 'Messages' });
+  await expect(messages.getByText('We’ll be there.')).toBeVisible();
   await expect(convo.getByText(/You can reply freely for 2[34] hours more/)).toBeVisible();
   await convo.getByLabel('Reply').fill('See you on the 17th, Lara!');
   await convo.getByRole('button', { name: 'Send' }).click();
-  await expect(convo.getByText('See you on the 17th, Lara!')).toBeVisible();
+  await expect(messages.getByText('See you on the 17th, Lara!')).toBeVisible();
   await expect(convo.getByLabel('Reply')).toHaveValue('');
   meta = await (await request.get(`${META}/__sent`)).json();
   expect(meta.sent.at(-1)).toEqual({
@@ -292,5 +294,5 @@ test('guests’ WhatsApp replies arrive in the inbox, alert the couple, and can 
   });
   // The link in the alert opens straight on the conversation.
   await page.goto(`${PUBLIC}/admin/inbox?thread=${lara.id}`);
-  await expect(page.getByLabel('Conversation with Lara Bello').getByText('See you on the 17th, Lara!')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Conversation with Lara Bello' }).getByRole('log').getByText('See you on the 17th, Lara!')).toBeVisible();
 });
