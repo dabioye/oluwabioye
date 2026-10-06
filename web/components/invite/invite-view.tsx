@@ -2,18 +2,19 @@
 import { useEffect, useState } from 'react';
 import { CreditCard, Mail, MapPin, ScrollText } from 'lucide-react';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AccessCard } from '@/components/wedding/access-card';
-import { EventBlock } from '@/components/wedding/event-block';
+import { EventDetails } from '@/components/wedding/event-details';
 import { Intro } from '@/components/wedding/intro';
 import { InvitationArt } from '@/components/wedding/invitation-art';
 import { Monogram } from '@/components/wedding/monogram';
-import { Frame, Rule, Sprig } from '@/components/wedding/ornaments';
+import { Frame, Rule } from '@/components/wedding/ornaments';
 import { Contacts, Dock, SiteFooter } from '@/components/wedding/site-chrome';
 import { api, ApiError } from '@/lib/api';
 import { codeFromPath } from '@/lib/code';
 import { cfg } from '@/lib/config';
-import { longDate, weekday } from '@/lib/format';
+import { longDate } from '@/lib/format';
 import { forget, recall, remember, useRemembered } from '@/lib/remember';
 import type { InviteData, InviteGuest } from '@/lib/types';
 import { RsvpForm } from './rsvp-form';
@@ -73,51 +74,27 @@ export function InviteView() {
         {state.kind === 'error' && <InviteError message={state.message} />}
         {data && guest && (
           <>
-            <section id="invitation" className="pt-[clamp(20px,5vw,40px)] text-center">
+            <h1 className="sr-only">
+              {c.bride} and {c.groom} invite {guest.name} to The Making of {c.surname}
+            </h1>
+            <section id="invitation" className="scroll-mt-4 pt-[clamp(16px,4vw,32px)] text-center">
               <InvitationArt
                 src={data.invite.art}
                 name={guest.name}
                 slot={data.invite.nameSlot}
-                alt={`Invitation for ${guest.name} to The Making of ${c.surname}, traditional wedding, ${longDate(cfg.date)}, ${trad.time}, ${trad.venue}.`}
+                code={guest.code}
+                codeSlot={data.invite.codeSlot}
+                alt={`Invitation for ${guest.name}, access code ${guest.code}: The Making of ${c.surname}, traditional wedding, strictly by invitation, ${longDate(cfg.date)}, ${trad.time}, ${trad.venue}. No children allowed.`}
               />
             </section>
 
-            <Frame id="details" className="overflow-hidden">
-              <Sprig className="top-0 -left-2" />
-              <Monogram className="text-gold" />
-              <div className="ui-caps mt-1.5 text-[0.95rem] tracking-[0.4em] text-ivory">
-                {c.bride} &nbsp;+&nbsp; {c.groom}
-              </div>
-              <Rule />
-              <div className="eyebrow">Cordially invite</div>
-              <p className="my-2 font-script text-[clamp(2rem,7vw,3rem)] leading-tight">{guest.name}</p>
-              <div className="eyebrow">to</div>
-              <div className="eyebrow mt-3.5">The making of</div>
-              <h1 className="display text-[clamp(2.4rem,9vw,4.6rem)]">{c.surname}</h1>
-              <p className="lede mt-4">
-                Together with their families,
-                <br />
-                {cfg.families.bride}
-                <br />
-                and {cfg.families.groom}
-              </p>
-              <div className="mt-2.5 font-display tracking-[0.18em]">
-                {weekday()} · {longDate(cfg.date)}
-              </div>
-              <div className="mt-7">
-                {guest.events.map((k) => (
-                  <EventBlock key={k} ev={cfg.events[k]} />
-                ))}
-              </div>
-              <ul className="mx-auto mt-5 grid max-w-[34em] list-none gap-3 p-0 text-left">
-                {data.invite.notes.map((n) => (
-                  <li key={n} className="grid grid-cols-[20px_1fr] gap-2.5 before:pt-1.5 before:text-[0.8rem] before:text-gold before:content-['✦']">
-                    {n}
-                  </li>
-                ))}
-              </ul>
-              <div className="eyebrow mt-6">Colours of the day · {cfg.colours.map((x) => x.name).join(' & ')}</div>
-            </Frame>
+            <EventDetails ev={trad} date={cfg.date}>
+              <Button asChild size="lg" className="ui-caps h-12 rounded-[2px] px-7 text-[0.74rem] tracking-[0.2em]">
+                <a href={trad.mapUrl} target="_blank" rel="noopener">
+                  <MapPin /> Directions
+                </a>
+              </Button>
+            </EventDetails>
 
             <Frame id="respond">
               <h2 className="display mb-3 text-[clamp(1.25rem,3.6vw,1.6rem)]">

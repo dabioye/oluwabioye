@@ -22,7 +22,14 @@ export type InviteGuest = { name: string; code: string; events: EventKey[]; rsvp
 export type InviteData = {
   guest: InviteGuest;
   qrSvg: string;
-  invite: { art: string; nameSlot: { top: number; maxSize: number }; notes: string[]; rsvpBy: string; intro: boolean };
+  invite: {
+    art: string;
+    nameSlot: { top: number; maxSize: number };
+    codeSlot: { top: number; left: number; size: number };
+    notes: string[];
+    rsvpBy: string;
+    intro: boolean;
+  };
   /** The public wedding website, for the link back to it. */
   publicUrl: string;
 };

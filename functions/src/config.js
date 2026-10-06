@@ -96,7 +96,10 @@ module.exports = {
   invitationArt: {
     church: '/img/invite-church.jpg',
     trad: '/img/invite-trad.jpg',
-    nameSlot: { top: 23.3, maxSize: 7.6 }, // where the name sits on the trad card (% from top, size in % of card width)
+    // Where the guest's name sits on the trad card (% from top, size in % of card width): the gap under "Cordially invites".
+    nameSlot: { top: 21.75, maxSize: 7.6 },
+    // Where the guest's access code is written, under "Access Code:" (% from top and left, size in % of card width).
+    codeSlot: { top: 78.9, left: 30.8, size: 3.6 },
   },
 
   // Gifts section on the homepage. Shows the registry button plus any accounts listed here.

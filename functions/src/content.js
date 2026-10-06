@@ -61,6 +61,7 @@ function inviteView(c) {
   return {
     art: c.invitationArt?.trad || defaults.invitationArt.trad,
     nameSlot: cfg.invitationArt.nameSlot,
+    codeSlot: cfg.invitationArt.codeSlot,
     notes: cfg.notes,
     rsvpBy: c.rsvpBy,
     intro: c.intro?.invite !== false,

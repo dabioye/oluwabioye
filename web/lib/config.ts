@@ -31,7 +31,7 @@ export type WeddingConfig = {
   hero: { photo: string; note: string };
   gallery: GalleryPhoto[];
   intro: { home: boolean; invite: boolean };
-  invitationArt: { church: string; trad: string; nameSlot: { top: number; maxSize: number } };
+  invitationArt: { church: string; trad: string; nameSlot: { top: number; maxSize: number }; codeSlot: { top: number; left: number; size: number } };
   gifts: { message: string; accounts: { bank: string; name: string; number: string }[] };
   inviteMessage: string;
 };

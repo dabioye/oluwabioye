@@ -1,6 +1,7 @@
 'use client';
 import { CalendarPlus, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { EventDetails } from '@/components/wedding/event-details';
 import { InvitationArt } from '@/components/wedding/invitation-art';
 import { PaperPage } from '@/components/wedding/paper';
 import { SiteFooter, SiteNav } from '@/components/wedding/site-chrome';
@@ -12,7 +13,7 @@ import { Registry } from './registry';
 const c = cfg.couple;
 const ev = cfg.events.church;
 
-/** The church invitation: the printed card itself, then directions and calendar, then the gift registry. */
+/** The church invitation: the printed card, then date, time and place with directions and calendar, then the gift registry. */
 export function InvitationView() {
   const { content } = useSiteContent();
   return (
@@ -35,10 +36,10 @@ export function InvitationView() {
           />
         </section>
 
-        <section aria-label="Directions and calendar" className="mt-6 flex flex-wrap justify-center gap-3">
+        <EventDetails ev={ev} date={cfg.date}>
           <Button asChild size="lg" className="ui-caps h-12 rounded-[2px] px-6 text-[0.74rem] tracking-[0.2em]">
             <a href={ev.mapUrl} target="_blank" rel="noopener">
-              <MapPin /> Open live map
+              <MapPin /> Directions
             </a>
           </Button>
           <Button
@@ -51,7 +52,7 @@ export function InvitationView() {
               <CalendarPlus /> Add to calendar
             </a>
           </Button>
-        </section>
+        </EventDetails>
 
         <Registry content={content} />
       </main>

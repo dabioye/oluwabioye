@@ -70,6 +70,7 @@ const store = require('../src/store');
   assert.equal(inv.guest.phone, undefined, 'contact details are not sent to the invitation page');
   assert(inv.qrSvg.startsWith('<svg'));
   assert.equal(inv.invite.art, '/img/invite-trad.jpg');
+  assert.equal(typeof inv.invite.codeSlot.top, 'number', 'card says where to write the access code');
   assert(inv.invite.notes.length > 0);
   r = await req(`/api/invite/${g.code}/rsvp`, json('POST', { response: 'yes', note: 'Can’t wait' }));
   inv = await r.json();

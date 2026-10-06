@@ -1,5 +1,6 @@
 // Where and how big the guest's name sits on the traditional invitation card.
 export type NameSlot = { top: number; maxSize: number };
+export type CodeSlot = { top: number; left: number; size: number };
 
 /** Long names go on two balanced lines so they stay legible inside the slot. Size is in % of card width. */
 export function nameLayout(name: string, slot: NameSlot) {

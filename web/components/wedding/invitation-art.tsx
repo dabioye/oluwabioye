@@ -1,9 +1,11 @@
 'use client';
-import { nameLayout, type NameSlot } from '@/lib/invitation';
+import { nameLayout, type CodeSlot, type NameSlot } from '@/lib/invitation';
 import { cn } from '@/lib/utils';
 import { useLightbox } from './lightbox';
 
-function Card({ src, alt, name, slot, className }: { src: string; alt: string; name?: string; slot?: NameSlot; className?: string }) {
+type CardProps = { src: string; alt: string; name?: string; slot?: NameSlot; code?: string; codeSlot?: CodeSlot; className?: string };
+
+function Card({ src, alt, name, slot, code, codeSlot, className }: CardProps) {
   const n = name && slot ? nameLayout(name, slot) : null;
   return (
     <div className={cn('relative [container-type:inline-size]', className)}>
@@ -21,12 +23,20 @@ function Card({ src, alt, name, slot, className }: { src: string; alt: string; n
           ))}
         </span>
       )}
+      {code && codeSlot && (
+        <span
+          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 font-display font-medium tracking-[0.18em] whitespace-nowrap text-[#f3e6cc] [text-shadow:0_1px_3px_rgb(0_0_0/0.5)]"
+          style={{ top: `${codeSlot.top}%`, left: `${codeSlot.left}%`, fontSize: `${codeSlot.size}cqw` }}
+        >
+          {code}
+        </span>
+      )}
     </div>
   );
 }
 
-/** The designed invitation card, with the guest's name set into it when there is one. Opens full size on tap. */
-export function InvitationArt(props: { src: string; alt: string; name?: string; slot?: NameSlot }) {
+/** The designed invitation card, with the guest's name (and access code) set into it when given. Opens full size on tap. */
+export function InvitationArt(props: Omit<CardProps, 'className'>) {
   const open = useLightbox();
   if (!props.src) return null;
   return (

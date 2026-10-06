@@ -25,10 +25,12 @@ test('public site: church wedding only, no RSVP, no code box', async ({ page }) 
   expect(body).not.toMatch(/rsvp/i);
   await expect(page.locator('input')).toHaveCount(0);
 
-  // The invitation page is the printed card, then directions and calendar, then the registry.
+  // The invitation page is the printed card, then date, time and place with directions and calendar, then the registry.
   await page.goto(`${PUBLIC}/invitation`);
   await expect(page.getByRole('img', { name: /^Invitation: together with their families/ })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Open live map' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Wedding Ceremony', exact: true })).toBeVisible();
+  await expect(page.getByText('78/80 Falolu Road, Surulere, Lagos')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Directions' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Add to calendar' })).toHaveAttribute('href', '/calendar/church.ics');
   await expect(page.getByRole('heading', { name: 'Celebrate our new chapter' })).toBeVisible();
   await page.goto(`${PUBLIC}/our-story`);
@@ -65,6 +67,15 @@ test('guest enters their code, is remembered, RSVPs and gets their access card',
   await expect(page.locator('#intro')).toContainText('Tope Omidiji');
   await page.getByRole('button', { name: 'Open the invitation' }).click();
 
+  // The card carries the guest's name and access code; under it, the reception details and directions.
+  await expect(
+    page.getByRole('img', {
+      name: `Invitation for Tope Omidiji, access code ${g.code}: The Making of Oluwabioye, traditional wedding, strictly by invitation, 17 December 2026, 2:00 PM, SCFN Multipurpose Hall. No children allowed.`,
+    }),
+  ).toBeVisible();
+  await expect(page.locator('#invitation').getByText(g.code)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Traditional Wedding & Reception' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Directions' }).first()).toHaveAttribute('href', /Sickle\+Cell/);
   await expect(page.getByRole('heading', { name: 'Will you join us, Tope?' })).toBeVisible();
   await page.getByLabel('A note for the couple').fill('Can’t wait!');
   await page.getByRole('button', { name: 'Send RSVP' }).click();
