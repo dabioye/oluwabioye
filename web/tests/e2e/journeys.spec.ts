@@ -232,6 +232,9 @@ test('with WhatsApp Business, the desk sends each guest their card and message f
 
 test('guests’ WhatsApp replies arrive in the inbox, alert the couple, and can be answered', async ({ page, request }) => {
   const lara = await addGuest(page.request, { name: 'Lara Bello', phone: '0809 999 9999' });
+  const browserErrors: string[] = [];
+  page.on('pageerror', (e) => browserErrors.push(`pageerror: ${e.stack || e.message}`));
+  page.on('console', (m) => m.type() === 'error' && browserErrors.push(`console: ${m.text()}`));
   // Meta delivers the reply to the webhook, signed with the app secret (a fresh id each attempt, as Meta would).
   const wamid = `wamid.lara.${Date.now()}`;
   const body = JSON.stringify({
@@ -285,7 +288,17 @@ test('guests’ WhatsApp replies arrive in the inbox, alert the couple, and can 
     .catch(async (e) => {
       // Show what the inbox actually had, to tell a data problem from a display one.
       console.log('thread API:', JSON.stringify(thread).slice(0, 1500));
-      console.log('conversation on screen:', await convo.innerText().catch(() => '(none)'));
+      console.log('conversation on screen:', await convo.innerText({ timeout: 2000 }).catch(() => '(none)'));
+      console.log(
+        'page:',
+        (
+          await page
+            .locator('body')
+            .innerText({ timeout: 2000 })
+            .catch(() => '(none)')
+        ).slice(0, 1500),
+      );
+      console.log('browser errors:', browserErrors.join('\n') || '(none)');
       throw e;
     });
   await expect(convo.getByText(/You can reply freely for 2[34] hours more/)).toBeVisible();
