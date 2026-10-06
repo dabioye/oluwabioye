@@ -76,6 +76,9 @@ jobs:
         run: |
           echo "BASE_URL=${{ vars.BASE_URL || 'https://sarahanddamilare.dabioye.com' }}" > functions/.env
           echo "INVITE_URL=${{ vars.INVITE_URL || 'https://oluwabioye.dabioye.com' }}" >> functions/.env
+          echo "WHATSAPP_PHONE_ID=${{ vars.WHATSAPP_PHONE_ID || 'none' }}" >> functions/.env
+          echo "WHATSAPP_TEMPLATE=${{ vars.WHATSAPP_TEMPLATE || 'oluwabioye_invitation' }}" >> functions/.env
+          echo "WHATSAPP_HEADER_IMAGE=${{ vars.WHATSAPP_HEADER_IMAGE || 'none' }}" >> functions/.env
       - name: Deploy
         if: env.SA != ''
         run: |

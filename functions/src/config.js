@@ -112,6 +112,8 @@ module.exports = {
 
   // WhatsApp / SMS invitation text. {name}, {link}, {rsvpBy} are filled in per guest.
   // This is for the private traditional wedding invitation.
+  // WhatsApp Business (Cloud API): the sending number and the approved template. The token is the WHATSAPP_TOKEN secret.
+  whatsapp: { phoneNumberId: '1170328419507856', template: 'oluwabioye_invitation' },
   inviteMessage:
     'Dear {name},\n\nSarah & Damilare joyfully invite you to The Making of Oluwabioye, our traditional wedding and reception, on {weekday}, 17 December 2026 at 2:00 PM in Lagos.\n\nThis invitation is personal to you. Please don\'t share the link.\nYour invitation, RSVP and access card: {link}\n\nKindly RSVP by {rsvpBy}.\n\n#TheMakingOfOluwabioye',
 };

@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError } from '@/lib/api';
 import type { StoryMoment } from '@/lib/config';
 import { shrink } from '@/lib/image';
-import type { SiteSettings } from '@/lib/types';
+import type { SiteSettings, WhatsAppStatus } from '@/lib/types';
 import { StaffHeader, StaffPage } from '../staff-shell';
 
 async function upload(file: File) {
@@ -111,6 +111,10 @@ export function SiteEditor() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState('');
   const galleryInput = useRef<HTMLInputElement>(null);
+  const [wa, setWa] = useState<WhatsAppStatus | null>(null);
+  useEffect(() => {
+    api<WhatsAppStatus>('/api/admin/whatsapp').then(setWa, () => {});
+  }, []);
 
   useEffect(() => {
     api<SiteSettings>('/api/admin/site')
@@ -398,6 +402,22 @@ export function SiteEditor() {
                 On private invitations
                 <Switch checked={s.intro.invite} onCheckedChange={(invite) => update((x) => ({ ...x, intro: { ...x.intro, invite } }))} />
               </label>
+            </fieldset>
+            <fieldset className="grid gap-2">
+              <legend className="mb-2 text-[0.72rem] tracking-[0.12em] text-ivory-dim uppercase">WhatsApp invitations</legend>
+              <label className="flex items-center justify-between gap-3 text-ivory">
+                Send the WhatsApp invitation automatically when a guest is added or imported
+                <Switch checked={!!s.waAutoSend} disabled={!wa?.configured} onCheckedChange={(waAutoSend) => update((x) => ({ ...x, waAutoSend }))} />
+              </label>
+              <p className="m-0 text-[0.8rem] text-ivory-dim">
+                {!wa
+                  ? 'Checking WhatsApp…'
+                  : !wa.configured
+                    ? 'WhatsApp API is not connected yet. Set the WhatsApp secrets, then redeploy.'
+                    : wa.template?.needsImage
+                      ? 'Your template starts with an image, so each guest’s card goes with it. That only works from the invitation desk, so guests aren’t sent automatically.'
+                      : 'WhatsApp API is connected. Turn this on only after a test send to yourself looks right.'}
+              </p>
             </fieldset>
           </Section>
         </div>

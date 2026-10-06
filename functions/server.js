@@ -11,6 +11,7 @@ const store = require('./src/store');
 const content = require('./src/content');
 const { weekday, longDate } = require('./src/dates');
 const { parseCsv, toCsv } = require('./src/csv');
+const whatsapp = require('./src/whatsapp');
 
 const PORT = process.env.PORT || 3000;
 const env = (k) => process.env[k] || '';
@@ -24,7 +25,7 @@ const SECRET = () => env('SESSION_SECRET') || (devSecret ||= crypto.randomBytes(
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', true);
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '2mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use((req, res, next) => {
   res.set('X-Content-Type-Options', 'nosniff');
   res.set('Referrer-Policy', 'same-origin');
@@ -97,6 +98,10 @@ const message = (g) =>
 const publicGuest = (g) => ({ ...g, link: inviteLink(g), message: message(g) });
 // What a guest sees about themselves on their invitation.
 const inviteGuest = (g) => ({ name: g.name, code: g.code, events: g.events, rsvp: g.rsvp, rsvpNote: g.rsvpNote, driverCard: !!g.driverCard });
+whatsapp.setValues(async (g) => ({ name: g.name, first: g.name.split(/\s+/)[0], code: g.code, link: inviteLink(g), rsvpBy: longDate((await content.current()).rsvpBy) }));
+// Auto-send the WhatsApp invitation when a guest is added or imported, if turned on in Edit website
+// (and the template doesn't need each guest's card, which only the desk can draw).
+const autoSend = async () => whatsapp.configured() && !!(await content.current()).waAutoSend && !(await whatsapp.needsCard().catch(() => true));
 const onPublicHost = (req) => !!env('INVITE_URL') && hostOf(INVITE_URL()) !== hostOf(BASE_URL()) && req.hostname === hostOf(BASE_URL());
 
 // ---------- public ----------
@@ -191,6 +196,17 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- WhatsApp Cloud API webhook (delivery / read receipts). Works on either domain. ----------
+app.get('/api/whatsapp/webhook', (req, res) => {
+  const challenge = whatsapp.verifyChallenge(req.query);
+  challenge !== null ? res.type('text/plain').send(challenge) : res.sendStatus(403);
+});
+app.post('/api/whatsapp/webhook', wrap(async (req, res) => {
+  if (!whatsapp.signatureOk(req.rawBody || Buffer.alloc(0), req.get('x-hub-signature-256'))) return res.sendStatus(401);
+  await whatsapp.handleWebhook(req.body || {});
+  res.sendStatus(200);
+}));
+
 // ---------- admin ----------
 const api = express.Router();
 api.use(needAdmin);
@@ -204,7 +220,11 @@ api.get('/guests', wrap(async (req, res) => {
   res.json({ guests: guests.map(publicGuest), activity, church, baseUrl: BASE_URL(), inviteUrl: INVITE_URL() });
 }));
 api.post('/guests', wrap(async (req, res) => {
-  try { res.json(publicGuest(await store.create(req.body))); } catch (e) { res.status(400).json({ error: e.message }); }
+  let g;
+  try { g = await store.create(req.body); } catch (e) { return res.status(400).json({ error: e.message }); }
+  let whatsappResult = null;
+  if (whatsapp.eligible(g) && (await autoSend())) whatsappResult = await whatsapp.sendInvite(g);
+  res.json({ ...publicGuest((await store.byId(g.id)) || g), whatsapp: whatsappResult });
 }));
 api.patch('/guests/:id', wrap(async (req, res) => {
   const g = await store.update(req.params.id, req.body);
@@ -231,15 +251,18 @@ api.post('/import', wrap(async (req, res) => {
   const seen = new Set(existing.map((g) => `${g.name.toLowerCase()}|${g.phone || ''}`));
   let added = 0;
   const skipped = [];
+  const created = [];
   for (const r of rows) {
     if (!r.name) continue;
     const key = `${r.name.toLowerCase()}|${r.phone || ''}`;
     if (seen.has(key)) { skipped.push(r.name); continue; }
     seen.add(key);
-    await store.create(r);
+    created.push(await store.create(r));
     added++;
   }
-  res.json({ added, skipped });
+  const sendable = created.filter(whatsapp.eligible);
+  const whatsappResult = sendable.length && (await autoSend()) ? await whatsapp.sendMany(sendable) : null;
+  res.json({ added, skipped, whatsapp: whatsappResult });
 }));
 api.get('/export.csv', wrap(async (req, res) => {
   const all = await store.all();
@@ -262,6 +285,28 @@ api.post('/media', express.raw({ type: ['image/jpeg', 'image/png', 'image/webp']
   if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'Send a JPEG, PNG or WebP image under 1 MB.' });
   const id = await store.saveMedia(req.body, req.get('content-type'));
   res.json({ url: '/media/' + id });
+}));
+api.get('/whatsapp', wrap(async (req, res) => {
+  const [s, c] = await Promise.all([whatsapp.status(), content.current()]);
+  const g = s.configured && req.query.guest ? await store.byId(String(req.query.guest)) : null;
+  if (g) s.preview = await whatsapp.preview(g).catch(() => '');
+  res.json({ ...s, autoSend: !!c.waAutoSend });
+}));
+// One guest's invitation; the body may be their personalised card (JPEG) for templates that start with an image.
+api.post('/guests/:id/whatsapp', express.raw({ type: 'image/jpeg', limit: '4mb' }), wrap(async (req, res) => {
+  const g = await guestOr404(req, res); if (!g) return;
+  const r = await whatsapp.sendInvite(g, Buffer.isBuffer(req.body) ? req.body : null);
+  res.status(r.ok ? 200 : 400).json({ ...r, guest: publicGuest(await store.byId(g.id)) });
+}));
+// Send to every WhatsApp guest who hasn't had an API invite yet (150 per call; the page repeats until done).
+// Only for templates that don't need each guest's card: the desk sends those one by one with the card.
+api.post('/whatsapp/send-pending', wrap(async (req, res) => {
+  if (!whatsapp.configured()) return res.status(400).json({ error: 'WhatsApp API is not set up yet.' });
+  if (await whatsapp.needsCard()) return res.status(409).json({ error: 'This template needs each guest’s card. Send from the invitation desk.' });
+  const pending = (await store.all()).filter(whatsapp.eligible).filter((g) => g.waStatus !== 'failed' || req.body.retryFailed);
+  const batch = pending.slice(0, 150);
+  const r = await whatsapp.sendMany(batch);
+  res.json({ ...r, remaining: pending.length - batch.length });
 }));
 app.use('/api/admin', api);
 

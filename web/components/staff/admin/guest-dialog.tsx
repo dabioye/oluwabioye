@@ -22,7 +22,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/lib/api';
 import { cfg, type EventKey } from '@/lib/config';
 import { ago, clock } from '@/lib/format';
-import type { Channel, Guest, Rsvp, Side } from '@/lib/types';
+import type { Channel, Guest, Rsvp, Side, WhatsAppResult } from '@/lib/types';
 
 type Form = {
   name: string;
@@ -105,8 +105,9 @@ function GuestForm({ open, guest, groups, onClose, onSaved }: Props) {
         if (f.rsvp !== guest.rsvp) await api(`/api/admin/guests/${guest.id}/rsvp`, { body: { rsvp: f.rsvp } });
         toast.success('Saved');
       } else {
-        const g = await api<Guest>('/api/admin/guests', { body });
-        toast.success(`${g.name} added · code ${g.code}`);
+        const g = await api<Guest & { whatsapp: WhatsAppResult | null }>('/api/admin/guests', { body });
+        const wa = g.whatsapp ? (g.whatsapp.ok ? ' · WhatsApp invite sent' : ` · WhatsApp failed: ${g.whatsapp.error}`) : '';
+        (g.whatsapp && !g.whatsapp.ok ? toast.warning : toast.success)(`${g.name} added · code ${g.code}${wa}`);
       }
       onClose();
       onSaved();

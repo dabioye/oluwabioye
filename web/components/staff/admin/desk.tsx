@@ -12,13 +12,14 @@ import { api, ApiError } from '@/lib/api';
 import { cfg } from '@/lib/config';
 import { ago, longDate, weekday } from '@/lib/format';
 import { canShareImages, cardFileName, download, preloadCard, renderCard } from '@/lib/card-image';
-import type { Activity, ChurchRsvp, Guest, Side, SiteSettings } from '@/lib/types';
+import type { Activity, ChurchRsvp, Guest, Side, SiteSettings, WhatsAppStatus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { StaffHeader, StaffPage } from '../staff-shell';
 import { GuestDialog } from './guest-dialog';
 import { ImportDialog } from './import-dialog';
 import { SendCardDialog } from './send-card-dialog';
-import { activityText, CHANNEL_LABEL, PILL, sendHref, type Stage, STAGES, stageOf } from './model';
+import { WhatsAppSendDialog } from './whatsapp-send-dialog';
+import { activityText, CHANNEL_LABEL, PILL, sendHref, type Stage, STAGES, stageOf, WA_TAG } from './model';
 
 type Data = { guests: Guest[]; activity: Activity[]; church: ChurchRsvp[]; inviteUrl: string };
 
@@ -72,6 +73,16 @@ export function Desk() {
   );
   const [cardStep, setCardStep] = useState<Guest | null>(null);
 
+  // WhatsApp Business: when connected, invitations go out from the couple's number without opening WhatsApp.
+  const [wa, setWa] = useState<WhatsAppStatus | null>(null);
+  const [waSending, setWaSending] = useState<Guest[] | null>(null);
+  useEffect(() => {
+    api<WhatsAppStatus>('/api/admin/whatsapp').then(setWa, () => {});
+  }, []);
+  /** Can this guest's invitation go through WhatsApp Business (with their card, if the template needs one)? */
+  const viaApi = (g: Guest) =>
+    !!wa?.configured && g.channel === 'whatsapp' && !!g.phone && g.rsvp !== 'no' && (!wa.template?.needsImage || (!!cardSrc && getsCard(g)));
+
   async function saveCard(g: Guest) {
     try {
       download(await cardFor(g), cardFileName(g.name));
@@ -86,6 +97,7 @@ export function Desk() {
    * follows from the share sheet; desktop browsers can't share images, so the card is downloaded to attach.
    */
   async function sendWithCard(g: Guest) {
+    if (viaApi(g)) return setWaSending([g]);
     window.open(sendHref(g), '_blank', 'noopener'); // open now, while the click still counts as the user's
     if (cardSrc && getsCard(g)) {
       if (canShareImages()) setCardStep(g);
@@ -97,9 +109,9 @@ export function Desk() {
     markSent(g, g.channel);
   }
   useEffect(() => {
-    const i = setInterval(() => !document.hidden && editing === undefined && !importing && !cardStep && refresh(), 60_000);
+    const i = setInterval(() => !document.hidden && editing === undefined && !importing && !cardStep && !waSending && refresh(), 60_000);
     return () => clearInterval(i);
-  }, [refresh, editing, importing, cardStep]);
+  }, [refresh, editing, importing, cardStep, waSending]);
 
   const guests = useMemo(() => data?.guests ?? [], [data]);
   const counts = useMemo(() => {
@@ -132,6 +144,7 @@ export function Desk() {
   }
 
   const unsent = rows.filter((g) => stageOf(g) === 'new' && g.channel !== 'physical' && sendHref(g));
+  const waPending = guests.filter((g) => viaApi(g) && !g.waMessageId && g.waStatus !== 'failed').sort((a, b) => a.name.localeCompare(b.name));
   const total = guests.length || 1;
   const sent = guests.filter((g) => g.sentAt || g.cardDelivered).length;
   const opened = guests.filter((g) => g.openedAt).length;
@@ -258,6 +271,16 @@ export function Desk() {
               ))}
             </div>
 
+            {waPending.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-[#1f7a4d]/15 px-3 py-2.5 text-[0.85rem]">
+                <span>
+                  {waPending.length} {waPending.length === 1 ? 'guest hasn’t' : 'guests haven’t'} had their WhatsApp invitation yet
+                </span>
+                <Button size="sm" className="bg-[#1f7a4d] text-white hover:bg-[#25915b]" onClick={() => setWaSending(waPending)}>
+                  <Send /> Send all pending via WhatsApp
+                </Button>
+              </div>
+            )}
             {stage === 'new' && unsent.length > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-gold/10 px-3 py-2.5 text-[0.85rem]">
                 <span>{unsent.length} ready to send</span>
@@ -292,6 +315,7 @@ export function Desk() {
                     onSent={markSent}
                     onDelivered={toggleDelivered}
                     onSendWhatsApp={() => sendWithCard(g)}
+                    viaApi={viaApi(g)}
                     onCard={cardSrc && getsCard(g) ? () => saveCard(g) : undefined}
                   />
                 ))
@@ -321,9 +345,12 @@ export function Desk() {
         </Card>
       </div>
 
+      {wa?.configured && <WhatsAppPanel wa={wa} />}
+
       <ChurchRsvps rows={data?.church ?? []} onChanged={refresh} />
 
       <GuestDialog open={editing !== undefined} guest={editing ?? null} groups={groups} onClose={() => setEditing(undefined)} onSaved={refresh} />
+      {wa && <WhatsAppSendDialog guests={waSending} wa={wa} render={cardFor} onProgress={refresh} onClose={() => setWaSending(null)} />}
       <SendCardDialog guest={cardStep} render={cardFor} onClose={() => setCardStep(null)} />
       <ImportDialog open={importing} onClose={() => setImporting(false)} onImported={refresh} />
     </StaffPage>
@@ -336,6 +363,7 @@ function GuestRow({
   onSent,
   onDelivered,
   onSendWhatsApp,
+  viaApi,
   onCard,
 }: {
   g: Guest;
@@ -343,6 +371,7 @@ function GuestRow({
   onSent: (g: Guest, via: string) => void;
   onDelivered: (g: Guest) => void;
   onSendWhatsApp: () => void;
+  viaApi: boolean;
   onCard?: () => void;
 }) {
   const st = stageOf(g);
@@ -366,6 +395,12 @@ function GuestRow({
           ))}
         </b>
         <small className="text-[0.78rem] [overflow-wrap:anywhere] text-ivory-dim">{meta}</small>
+        {g.waStatus && (
+          <Badge variant="outline" className={cn('mt-1 text-[0.65rem] font-normal', WA_TAG[g.waStatus].className)} title={g.waError || undefined}>
+            {WA_TAG[g.waStatus].label}
+            {g.waStatus === 'failed' && g.waError ? `: ${g.waError}` : ''}
+          </Badge>
+        )}
       </button>
       <div>
         <Badge variant="outline" className={cn('text-[0.7rem]', PILL[st].className)} title={g.rsvpNote || undefined}>
@@ -380,7 +415,7 @@ function GuestRow({
           </Button>
         ) : href && g.channel === 'whatsapp' ? (
           <Button size="sm" className="bg-[#1f7a4d] text-white hover:bg-[#25915b]" onClick={onSendWhatsApp}>
-            <Send /> {g.sentAt ? 'Resend' : 'Send'} · WhatsApp
+            <Send /> {(viaApi ? g.waMessageId : g.sentAt) ? 'Resend' : 'Send'} · WhatsApp
           </Button>
         ) : href ? (
           <Button asChild size="sm">
@@ -420,6 +455,45 @@ function GuestRow({
         )}
       </div>
     </div>
+  );
+}
+
+/** What the desk knows about the WhatsApp Business connection. */
+function WhatsAppPanel({ wa }: { wa: WhatsAppStatus }) {
+  const t = wa.template;
+  const rows: [string, string][] = [
+    ['From', [wa.phone?.display_phone_number, wa.phone?.verified_name].filter(Boolean).join(' · ') || '—'],
+    ['Template', t ? `${t.name} · ${t.language} · ${t.fallback ? 'not read from Meta' : `${t.category.toLowerCase()}, ${t.status.toLowerCase()}`}` : '—'],
+    ['Card', t?.needsImage ? 'Each guest’s card goes with their message' : 'No image in the template'],
+    ['Number quality', wa.phone?.quality_rating ? wa.phone.quality_rating.toLowerCase() : '—'],
+    ['Access token', wa.token?.error ? 'couldn’t check' : wa.token?.expiresAt ? `expires ${wa.token.expiresAt.slice(0, 10)}` : 'never expires'],
+    ['Automatic sending', wa.autoSend ? 'on (Edit website)' : 'off (Edit website)'],
+  ];
+  return (
+    <Card className="mt-4 gap-3 border-hairline-soft bg-navy-2/60 py-4">
+      <CardHeader className="px-4">
+        <CardTitle className="ui-caps text-[0.72rem] text-ivory-dim">
+          WhatsApp Business · <span className={wa.ready ? 'text-ok' : 'text-warn'}>{wa.ready ? 'ready' : 'needs attention'}</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-2 px-4 text-[0.85rem]">
+        <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
+          {rows.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="text-ivory-dim">{k}</dt>
+              <dd className="m-0 [overflow-wrap:anywhere]">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        {!!wa.problems?.length && (
+          <ul className="m-0 grid gap-1 pl-4 text-warn">
+            {wa.problems.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -54,7 +54,7 @@ const store = require('../src/store');
   assert.match(g.code, /^[A-HJ-NP-Z2-9]{6}$/);
   assert(g.message.includes(g.link) && g.message.includes('traditional'));
   r = await req('/api/admin/import', json('POST', { csv: 'Full Name,Phone,Side,Events\n"Ade, Jnr",0802,bride,church\nTope Omidiji,08031234567,groom,trad' }, admin));
-  assert.deepEqual(await r.json(), { added: 1, skipped: ['Tope Omidiji'] });
+  assert.deepEqual(await r.json(), { added: 1, skipped: ['Tope Omidiji'], whatsapp: null });
 
   // Code entry on the invite site: forgiving input, right code never counts against the guest
   const guestIp = { 'X-Forwarded-For': '10.0.0.1' };
@@ -139,6 +139,113 @@ const store = require('../src/store');
   assert((await r.json()).guests[0].link.startsWith('http://invite.test/i/'));
   assert.equal((await req('/calendar/trad.ics', { headers: { 'X-Forwarded-Host': 'public.test' } })).status, 404);
   assert.equal((await req('/calendar/trad.ics', { headers: { 'X-Forwarded-Host': 'invite.test' } })).status, 200);
+
+  // ---------- WhatsApp Cloud API (Meta mocked) ----------
+  const wa = require('../src/whatsapp');
+  const meta = { calls: [], template: {
+    name: 'oluwabioye_invitation', language: 'en_GB', status: 'APPROVED', category: 'MARKETING',
+    components: [
+      { type: 'BODY', text: 'Dear {{1}}, … Kindly RSVP by {{2}}.', example: { body_text: [['Tope Omidiji', '30 November 2026']] } },
+      { type: 'FOOTER', text: '#TheMakingOfOluwabioye' },
+      { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'View invitation', url: 'http://invite.test/i/{{1}}', example: ['http://invite.test/i/B27CVE'] }] },
+    ],
+  } };
+  const reply = (status, o) => ({ ok: status < 400, status, json: async () => o });
+  wa._setFetch(async (url, opts) => {
+    const u = new URL(url);
+    u.pathname = u.pathname.replace(/^\/v\d+\.\d+/, '');
+    const call = { path: u.pathname, auth: opts.headers.Authorization, body: opts.body };
+    meta.calls.push(call);
+    if (u.pathname === '/debug_token') return reply(200, { data: { is_valid: true, expires_at: 0, granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['WABA1'] }] } });
+    if (u.pathname === '/WABA1/message_templates') return reply(200, { data: [meta.template] });
+    if (u.pathname === '/PHONE1') return reply(200, { display_phone_number: '+234 807 269 2636', verified_name: 'Dabioye Solutions', quality_rating: 'GREEN' });
+    if (u.pathname === '/PHONE1/media') return reply(200, { id: 'MEDIA1' });
+    if (u.pathname === '/PHONE1/messages') {
+      call.json = JSON.parse(opts.body);
+      if (call.json.to === '2348000000000') return reply(400, { error: { message: 'Recipient not on WhatsApp' } });
+      return reply(200, { messages: [{ id: 'wamid.' + meta.calls.length }] });
+    }
+    return reply(404, { error: { message: 'Unknown path ' + u.pathname } });
+  });
+  const lastSend = () => meta.calls.filter((c) => c.path === '/PHONE1/messages').at(-1).json;
+  assert.equal(wa.toWaNumber('0803 123 4567'), '2348031234567');
+  assert.equal(wa.toWaNumber('+44 7700 900123'), '447700900123');
+  assert.equal(wa.toWaNumber('0803'), '');
+  r = await req('/api/admin/whatsapp', { headers: { cookie: admin } });
+  assert.deepEqual(await r.json(), { configured: false, ready: false, autoSend: false });
+  r = await req('/api/admin/guests', json('POST', { name: 'No Api Yet', phone: '08030000001' }, admin));
+  assert.equal((await r.json()).whatsapp, null, 'no send before API is configured');
+  Object.assign(process.env, { WHATSAPP_TOKEN: 'tok', WHATSAPP_PHONE_ID: 'PHONE1', WHATSAPP_APP_SECRET: 'appsecret', WHATSAPP_VERIFY_TOKEN: 'verifyme' });
+  r = await req('/api/admin/guests', json('POST', { name: 'Not Auto', phone: '08030000002' }, admin));
+  assert.equal((await r.json()).whatsapp, null, 'auto-send is off by default');
+
+  // The desk's view: the approved template, read from Meta, and the message as one guest will read it
+  r = await req(`/api/admin/whatsapp?guest=${g.id}`, { headers: { cookie: admin } });
+  const st = await r.json();
+  assert.equal(st.ready, true, JSON.stringify(st));
+  assert.deepEqual(st.problems, []);
+  assert.equal(st.template.language, 'en_GB');
+  assert.equal(st.template.needsImage, false);
+  assert.equal(st.phone.display_phone_number, '+234 807 269 2636');
+  assert.equal(st.preview, 'Dear Tope Omidiji, … Kindly RSVP by 30 November 2026.\n\n#TheMakingOfOluwabioye');
+  assert(meta.calls.every((c) => c.auth === 'Bearer tok'));
+
+  await req('/api/admin/site', json('PUT', { waAutoSend: true }, admin));
+  r = await req('/api/admin/guests', json('POST', { name: 'Ada Lovelace', phone: '0803 555 0000' }, admin));
+  const ada = await r.json();
+  assert(ada.whatsapp && ada.whatsapp.ok, 'auto-sent on add: ' + JSON.stringify(ada.whatsapp));
+  assert.equal(ada.waStatus, 'accepted');
+  assert(ada.sentAt);
+  assert.deepEqual(lastSend(), {
+    messaging_product: 'whatsapp', recipient_type: 'individual', to: '2348035550000', type: 'template',
+    template: { name: 'oluwabioye_invitation', language: { code: 'en_GB' }, components: [
+      { type: 'body', parameters: [{ type: 'text', text: 'Ada Lovelace' }, { type: 'text', text: '30 November 2026' }] },
+      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: ada.code }] },
+    ] },
+  });
+  r = await req('/api/admin/import', json('POST', { csv: 'name,phone,channel\nBad Number,08000000000,whatsapp\nGood One,08031112223,whatsapp\nPrinted,08031112224,physical' }, admin));
+  const imp = await r.json();
+  assert.equal(imp.added, 3);
+  assert.equal(imp.whatsapp.sent, 1);
+  assert.deepEqual(imp.whatsapp.failed, ['Bad Number: Recipient not on WhatsApp']);
+  r = await req('/api/admin/whatsapp/send-pending', json('POST', {}, admin));
+  const pend = await r.json();
+  assert.equal(pend.sent, 3, 'earlier guests picked up by send-pending: ' + JSON.stringify(pend));
+  assert.equal(pend.remaining, 0);
+  const all = (await (await req('/api/admin/guests', { headers: { cookie: admin } })).json());
+  const bad = all.guests.find((x) => x.name === 'Bad Number');
+  assert.deepEqual([bad.waStatus, bad.waError, bad.sentAt], ['failed', 'Recipient not on WhatsApp', null]);
+  assert(all.activity.some((a) => a.type === 'wafailed' && a.name === 'Bad Number'));
+  assert(!all.guests.find((x) => x.name === 'Printed').waMessageId, 'printed-card guests are skipped');
+
+  // Webhook: Meta's challenge, then signed delivery receipts that never go backwards
+  assert.equal(await (await req('/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=verifyme&hub.challenge=42')).text(), '42');
+  assert.equal((await req('/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=nope&hub.challenge=42')).status, 403);
+  const hook = JSON.stringify({ entry: [{ changes: [{ value: { statuses: [{ id: ada.whatsapp.id, status: 'read', timestamp: '1790000000' }, { id: ada.whatsapp.id, status: 'delivered' }] } }] }] });
+  const sig = 'sha256=' + require('crypto').createHmac('sha256', 'appsecret').update(hook).digest('hex');
+  assert.equal((await req('/api/whatsapp/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': 'sha256=bad' }, body: hook })).status, 401);
+  assert.equal((await req('/api/whatsapp/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': sig }, body: hook })).status, 200);
+  assert.equal((await store.byId(ada.id)).waStatus, 'read', 'read is not downgraded by a late delivered');
+
+  // A template that starts with an image gets each guest's card from the desk; nothing can go out without it
+  meta.template = { ...meta.template, components: [{ type: 'HEADER', format: 'IMAGE' }, ...meta.template.components] };
+  wa._reset();
+  r = await req(`/api/admin/guests/${g.id}/whatsapp`, { method: 'POST', headers: { cookie: admin, 'Content-Type': 'image/jpeg' }, body: png });
+  let one = await r.json();
+  assert.equal(r.status, 200, JSON.stringify(one));
+  const upload = meta.calls.filter((c) => c.path === '/PHONE1/media').at(-1);
+  assert(upload.body instanceof FormData && (await upload.body.get('file').arrayBuffer()).byteLength === png.length, 'card uploaded');
+  assert.deepEqual(lastSend().template.components[0], { type: 'header', parameters: [{ type: 'image', image: { id: 'MEDIA1' } }] });
+  assert.equal(one.guest.waMessageId, one.id);
+  r = await req(`/api/admin/guests/${g.id}/whatsapp`, { method: 'POST', headers: { cookie: admin } });
+  one = await r.json();
+  assert.equal(r.status, 400);
+  assert.match(one.error, /card/);
+  assert.equal((await req('/api/admin/whatsapp/send-pending', json('POST', {}, admin))).status, 409);
+  r = await req('/api/admin/guests', json('POST', { name: 'Waits For Card', phone: '08030000009' }, admin));
+  assert.equal((await r.json()).whatsapp, null, 'auto-send holds back when the card is needed');
+  assert.equal((await req(`/api/admin/guests/${g.id}/whatsapp`, { method: 'POST', headers: { cookie: gate } })).status, 401);
+  await req('/api/admin/site', json('PUT', { waAutoSend: false }, admin));
 
   r = await req('/api/logout', { method: 'POST', headers: { cookie: admin } });
   assert.match(r.headers.get('set-cookie'), /__session=;/);

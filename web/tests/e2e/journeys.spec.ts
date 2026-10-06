@@ -1,13 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { INVITE, PUBLIC } from '../../playwright.config';
+import { INVITE, META, PUBLIC } from '../../playwright.config';
 
 // Skip the wax-seal envelope unless a test is about it.
 const skipIntro = (page: Page) => page.addInitScript(() => ['home', 'invite'].forEach((k) => sessionStorage.setItem(`opened:${k}`, '1')));
 
-async function addGuest(request: APIRequestContext, body: Record<string, unknown>) {
-  await request.post(`${PUBLIC}/api/login`, { data: { kind: 'admin', password: 'test-admin' } });
+async function addGuest(request: APIRequestContext, body: Record<string, unknown>, signIn = true) {
+  if (signIn) await request.post(`${PUBLIC}/api/login`, { data: { kind: 'admin', password: 'test-admin' } });
   const r = await request.post(`${PUBLIC}/api/admin/guests`, { data: body });
   expect(r.ok()).toBeTruthy();
   return (await r.json()) as { code: string; name: string; id: string };
@@ -143,7 +143,8 @@ test('ushers check guests in at the gate', async ({ page, request }) => {
 
 test('sending on WhatsApp from a phone opens the guest’s chat with the message, then shares the card', async ({ page, request }) => {
   const g = await addGuest(request, { name: 'Funke Bello', phone: '08066666666' });
-  // Stand-ins for WhatsApp and the phone's share sheet: record what would be sent.
+  // Without WhatsApp Business, the desk opens WhatsApp itself. Stand-ins for WhatsApp and the share sheet record what would be sent.
+  await page.route('**/api/admin/whatsapp*', (r) => r.fulfill({ json: { configured: false, ready: false } }));
   await page.addInitScript(() => {
     const w = window as unknown as { opened: string[]; shared: unknown[] };
     w.opened = [];
@@ -181,4 +182,49 @@ test('sending on WhatsApp from a phone opens the guest’s chat with the message
   expect(shared[0].text).toBeUndefined();
   expect(shared[0].files[0]).toMatchObject({ name: 'Invitation - Funke Bello.jpg', type: 'image/jpeg' });
   expect(shared[0].files[0].size).toBeGreaterThan(50_000);
+});
+
+test('with WhatsApp Business, the desk sends each guest their card and message from the couple’s number', async ({ page, request }) => {
+  // Signed in once, through the page (the sign-in limit is 8 a minute and the suite signs in a lot).
+  const kemi = await addGuest(page.request, { name: 'Kemi Adeyemi', phone: '0807 777 7777' });
+  await addGuest(page.request, { name: 'Bayo Ojo', phone: '08088888888' }, false);
+  await page.goto(`${PUBLIC}/admin`);
+  await expect(page.getByText(/WhatsApp Business · ready/i)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('+234 807 269 2636 · Dabioye Solutions')).toBeVisible();
+
+  // One guest: preview of exactly what they'll get, then send
+  const row = page
+    .locator('div', { hasText: 'Kemi Adeyemi' })
+    .filter({ has: page.getByRole('button', { name: /send · WhatsApp/i }) })
+    .last();
+  await row.getByRole('button', { name: /Send · WhatsApp/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Send Kemi Adeyemi’s invitation on WhatsApp' });
+  await expect(dialog.getByRole('img', { name: 'Invitation card for Kemi Adeyemi' })).toBeVisible();
+  await expect(dialog.getByText(/^Dear Kemi Adeyemi,/)).toBeVisible();
+  await expect(dialog.getByText('View invitation')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Send now' }).click();
+  await expect(dialog.getByText(/Done\. 1 sent of 1/)).toBeVisible();
+  await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(row.getByText('WhatsApp queued')).toBeVisible();
+
+  let meta = await (await request.get(`${META}/__sent`)).json();
+  const msg = meta.sent.at(-1);
+  expect(msg.to).toBe('2348077777777');
+  expect(msg.template.name).toBe('oluwabioye_invitation');
+  expect(msg.template.components[0]).toEqual({ type: 'header', parameters: [{ type: 'image', image: { id: `MEDIA${meta.media.length}` } }] });
+  expect(msg.template.components[1].parameters[0].text).toBe('Kemi Adeyemi');
+  expect(msg.template.components[2]).toEqual({ type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: kemi.code }] });
+  expect(meta.media.at(-1).size).toBeGreaterThan(50_000);
+
+  // Everyone else who hasn't had theirs yet
+  await page.getByRole('button', { name: 'Send all pending via WhatsApp' }).click();
+  const bulk = page.getByRole('dialog', { name: /^Send \d+ invitations on WhatsApp$/ });
+  await bulk.getByRole('button', { name: /^Send all \d+$/ }).click();
+  await expect(bulk.getByText(/^Done\./)).toBeVisible({ timeout: 30_000 });
+  await expect(bulk.getByText(/failed/)).toHaveCount(0);
+  await bulk.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Send all pending via WhatsApp' })).toHaveCount(0);
+  meta = await (await request.get(`${META}/__sent`)).json();
+  expect(meta.sent.map((m: { to: string }) => m.to)).toContain('2348088888888');
+  expect(meta.sent.filter((m: { to: string }) => m.to === '2348077777777')).toHaveLength(1);
 });

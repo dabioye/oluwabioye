@@ -56,7 +56,18 @@ export function activityText(a: Activity) {
     opened: `${a.name} opened their invitation`,
     rsvp: `${a.name} ${a.extra === 'yes' ? 'is attending' : a.extra === 'no' ? 'can’t attend' : 'reset to awaiting reply'}`,
     checkin: `${a.name} arrived`,
+    waread: `${a.name} read the WhatsApp invitation`,
+    wafailed: `WhatsApp invite to ${a.name} failed${a.extra ? `: ${a.extra}` : ''}`,
     church: `${a.name} replied to the church RSVP (${a.extra})`,
   };
   return t[a.type] || a.type;
 }
+
+/** WhatsApp Business delivery, as a tag on each guest. */
+export const WA_TAG = {
+  accepted: { label: 'WhatsApp queued', className: 'border-[#9db7e6]/40 text-[#9db7e6]' },
+  sent: { label: 'WhatsApp sent', className: 'border-[#9db7e6]/40 text-[#9db7e6]' },
+  delivered: { label: 'WhatsApp delivered', className: 'border-ok/40 text-ok' },
+  read: { label: 'WhatsApp read', className: 'border-ok bg-ok text-navy' },
+  failed: { label: 'WhatsApp failed', className: 'border-bad/50 text-bad' },
+} as const;

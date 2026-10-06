@@ -107,6 +107,8 @@ function jsonBackend() {
     },
     async markSent(g, via) { return patch(g.id, { sentAt: g.sentAt || now() }, 'sent', via || g.channel); },
     async unmarkSent(g) { return patch(g.id, { sentAt: null }); },
+    async setWa(id, p, logType, extra) { return patch(id, p, logType, extra); },
+    async byWaId(wid) { const g = state.guests.find((x) => x.waMessageId === wid); return g ? { ...g } : null; },
     async markOpened(g) {
       const cur = find(g.id);
       return patch(g.id, { openCount: (cur.openCount || 0) + 1, openedAt: cur.openedAt || now() }, cur.openedAt ? null : 'opened');
@@ -218,6 +220,11 @@ function firestoreBackend() {
     },
     async markSent(g, via) { return patch(g.id, { sentAt: g.sentAt || now() }, 'sent', via || g.channel); },
     async unmarkSent(g) { return patch(g.id, { sentAt: null }); },
+    async setWa(id, p, logType, extra) { return patch(id, p, logType, extra); },
+    async byWaId(wid) {
+      const s = await guests.where('waMessageId', '==', String(wid)).limit(1).get();
+      return s.empty ? null : s.docs[0].data();
+    },
     async markOpened(g) {
       const first = !g.openedAt;
       const p = { openCount: FieldValue.increment(1) };

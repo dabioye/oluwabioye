@@ -34,6 +34,10 @@ export type InviteData = {
   publicUrl: string;
 };
 
+/** What an automatic WhatsApp send did, when adding or importing guests. */
+export type WhatsAppResult = { ok: boolean; id?: string; error?: string };
+export type WhatsAppBatch = { sent: number; failed: string[] };
+
 /** A guest as the invitation desk sees them. */
 export type Guest = {
   id: string;
@@ -59,6 +63,37 @@ export type Guest = {
   createdAt: string;
   link: string;
   message: string;
+  /** WhatsApp Business: the message id of the invitation, how far it got, and why it failed. */
+  waMessageId?: string;
+  waStatus?: 'accepted' | 'sent' | 'delivered' | 'read' | 'failed';
+  waError?: string;
+  waSentAt?: string;
+  waReadAt?: string;
+};
+
+/** GET /api/admin/whatsapp: whether invitations can go out through WhatsApp Business. */
+export type WhatsAppStatus = {
+  ready: boolean;
+  configured: boolean;
+  autoSend?: boolean;
+  problems?: string[];
+  token?: { valid?: boolean; expiresAt?: string | null; error?: string };
+  phone?: { display_phone_number?: string; verified_name?: string; quality_rating?: string; error?: string };
+  template?: {
+    name: string;
+    language: string;
+    status: string;
+    /** True when the template couldn't be read from Meta and the README layout is assumed. */
+    fallback?: boolean;
+    category: string;
+    header: string;
+    needsImage: boolean;
+    body: string;
+    footer: string;
+    buttons: { type: string; text: string; url: string }[];
+  };
+  /** The message as the guest asked about (?guest=id) will read it. */
+  preview?: string;
 };
 export type Activity = { at: string; type: string; guestId: string | null; name: string; extra: string };
 export type ChurchRsvp = {
@@ -84,6 +119,8 @@ export type SiteSettings = {
   rsvpBy: string;
   invitationArt: { church: string; trad: string };
   intro: { home: boolean; invite: boolean };
+  /** Send the WhatsApp invitation as soon as a guest is added or imported. */
+  waAutoSend?: boolean;
   /** Read-only: the invite site, where the traditional card is served from. */
   inviteUrl?: string;
 };

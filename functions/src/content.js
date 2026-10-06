@@ -7,6 +7,7 @@ const defaults = JSON.parse(JSON.stringify({
   hero: cfg.hero, story: cfg.story, gallery: cfg.gallery, registryUrl: cfg.registryUrl,
   giftsMessage: cfg.gifts.message, publicNotes: cfg.publicNotes, rsvpBy: cfg.rsvpBy,
   invitationArt: { church: cfg.invitationArt.church, trad: cfg.invitationArt.trad }, intro: cfg.intro,
+  waAutoSend: false,
 }));
 
 const str = (v, max = 2000) => String(v ?? '').trim().slice(0, max);
@@ -27,6 +28,7 @@ function sanitize(input = {}) {
   if ('rsvpBy' in input && /^\d{4}-\d{2}-\d{2}$/.test(str(input.rsvpBy))) out.rsvpBy = str(input.rsvpBy);
   if (input.invitationArt) out.invitationArt = { church: url(input.invitationArt.church), trad: url(input.invitationArt.trad) };
   if (input.intro) out.intro = { home: !!input.intro.home, invite: !!input.intro.invite };
+  if ('waAutoSend' in input) out.waAutoSend = !!input.waAutoSend;
   return out;
 }
 

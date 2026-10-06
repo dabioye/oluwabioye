@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/lib/api';
+import type { WhatsAppBatch } from '@/lib/types';
 
 /** Paste rows from Excel / Google Sheets or pick a CSV file. */
 export function ImportDialog({ open, onClose, onImported }: { open: boolean; onClose: () => void; onImported: () => void }) {
@@ -19,8 +20,12 @@ export function ImportDialog({ open, onClose, onImported }: { open: boolean; onC
     if (!text.trim()) return setResult('Paste some rows or choose a file first.');
     setBusy(true);
     try {
-      const r = await api<{ added: number; skipped: string[] }>('/api/admin/import', { body: { csv: text } });
-      setResult(`Added ${r.added} guest${r.added === 1 ? '' : 's'}.` + (r.skipped.length ? ` Skipped ${r.skipped.length} already on the list.` : ''));
+      const r = await api<{ added: number; skipped: string[]; whatsapp: WhatsAppBatch | null }>('/api/admin/import', { body: { csv: text } });
+      setResult(
+        `Added ${r.added} guest${r.added === 1 ? '' : 's'}.` +
+          (r.skipped.length ? ` Skipped ${r.skipped.length} already on the list.` : '') +
+          (r.whatsapp ? ` WhatsApp: ${r.whatsapp.sent} sent${r.whatsapp.failed.length ? `, ${r.whatsapp.failed.length} failed` : ''}.` : ''),
+      );
       setText('');
       onImported();
     } catch (err) {
