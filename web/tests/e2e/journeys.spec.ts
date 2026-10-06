@@ -25,8 +25,12 @@ test('public site: church wedding only, no RSVP, no code box', async ({ page }) 
   expect(body).not.toMatch(/rsvp/i);
   await expect(page.locator('input')).toHaveCount(0);
 
+  // The invitation page is the printed card, then directions and calendar, then the registry.
   await page.goto(`${PUBLIC}/invitation`);
-  await expect(page.getByRole('heading', { name: /Oluwafunmilayo Sarah/ })).toBeVisible();
+  await expect(page.getByRole('img', { name: /^Invitation: together with their families/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open live map' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Add to calendar' })).toHaveAttribute('href', '/calendar/church.ics');
+  await expect(page.getByRole('heading', { name: 'Celebrate our new chapter' })).toBeVisible();
   await page.goto(`${PUBLIC}/our-story`);
   await expect(page.getByRole('heading', { name: /The Making/ })).toBeVisible();
 });
