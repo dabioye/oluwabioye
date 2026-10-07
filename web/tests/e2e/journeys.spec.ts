@@ -20,6 +20,10 @@ test('public site: church wedding only, no RSVP, no code box', async ({ page }) 
   await page.getByRole('button', { name: 'Open the invitation' }).click();
   await expect(page.locator('#intro')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Wedding Ceremony' })).toBeVisible();
+  // Every Gift Registry link goes straight to the registry, not to a section of the site.
+  const registry = page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Gift Registry' });
+  await expect(registry).toHaveAttribute('href', 'https://wishgum.com/w/sarahdamilare_');
+  await expect(registry).toHaveAttribute('target', '_blank');
   const body = await page.locator('body').innerText();
   expect(body).toContain('Garden of Peace');
   expect(body).not.toMatch(/SCFN|Traditional Wedding/);
@@ -80,7 +84,10 @@ test('guest enters their code, is remembered, RSVPs and gets their access card',
   // The church ceremony follows, and the nav leads to the story and the registry on the public site.
   await expect(page.getByRole('heading', { name: 'Wedding Ceremony', exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Our Story' })).toHaveAttribute('href', `${PUBLIC}/our-story`);
-  await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Gift Registry' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Gift Registry' })).toHaveAttribute(
+    'href',
+    'https://wishgum.com/w/sarahdamilare_',
+  );
 
   // RSVP: a declining guest is asked for a reason; accepting sends straight away, with the note.
   await expect(page.getByRole('heading', { name: 'Send RSVP' })).toBeVisible();

@@ -22,7 +22,7 @@ export function InvitationView() {
         links={[
           { href: '/', label: 'Home' },
           { href: '/our-story', label: 'Our Story' },
-          { href: '#gifts', label: 'Gift Registry' },
+          { href: content.registryUrl || '#gifts', label: 'Gift Registry', external: !!content.registryUrl },
         ]}
       />
       <main className="mx-auto max-w-[820px] pt-[clamp(16px,4vw,40px)] pb-6">

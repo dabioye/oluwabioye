@@ -20,7 +20,7 @@ export function StoryView() {
         links={[
           { href: '/', label: 'Home' },
           { href: '/invitation', label: 'Invitation' },
-          { href: '/#gifts', label: 'Gift Registry' },
+          { href: content.registryUrl || '/#gifts', label: 'Gift Registry', external: !!content.registryUrl },
         ]}
       />
       <main className="mx-auto max-w-[900px]">

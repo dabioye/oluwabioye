@@ -79,7 +79,7 @@ export function HomeView() {
           { href: '/invitation', label: 'Invitation' },
           { href: '/our-story', label: 'Our Story' },
           ...(hasGallery ? [{ href: '#gallery', label: 'Gallery' }] : []),
-          { href: '#gifts', label: 'Gift Registry' },
+          { href: content.registryUrl || '#gifts', label: 'Gift Registry', external: !!content.registryUrl },
         ]}
       />
 
