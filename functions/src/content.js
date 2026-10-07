@@ -48,7 +48,7 @@ async function current() {
 // What the public church site may see. Nothing about the traditional wedding goes in here.
 function publicView(c) {
   return {
-    hero: { photo: c.hero?.photo || '', note: c.hero?.note || '' },
+    hero: { photo: c.hero?.photo || defaults.hero.photo, note: c.hero?.note || '' },
     story: c.story || [],
     gallery: c.gallery || [],
     registryUrl: c.registryUrl || defaults.registryUrl,

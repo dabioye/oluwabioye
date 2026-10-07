@@ -78,9 +78,10 @@ module.exports = {
   // Add the couple's story here when the final copy is ready.
   story: [],
 
-  // Full-screen couple photo at the top of the homepage. Leave photo '' to use the monogram header.
+  // Full-screen couple photo at the top of the homepage (public site only: web/site-assets/public/img).
+  // A photo uploaded in Edit website replaces it.
   hero: {
-    photo: '', // e.g. '/img/couple.jpg' (portrait, at least 1200px tall)
+    photo: '/img/couple.jpg',
     note: '',  // short personal welcome, e.g. 'We can’t wait to celebrate with you.'
   },
 

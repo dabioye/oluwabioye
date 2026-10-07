@@ -6,7 +6,7 @@ import { EventDetails } from '@/components/wedding/event-details';
 import { Intro } from '@/components/wedding/intro';
 import { Monogram } from '@/components/wedding/monogram';
 import { Wordmark } from '@/components/wedding/wordmark';
-import { Frame, Rule, Sprig } from '@/components/wedding/ornaments';
+import { Frame, Sprig } from '@/components/wedding/ornaments';
 import { Contacts, Dock, SiteFooter, SiteNav } from '@/components/wedding/site-chrome';
 import { cfg } from '@/lib/config';
 import { useSiteContent } from '@/lib/content';
@@ -92,13 +92,7 @@ export function HomeView() {
         >
           <div className="grid justify-items-center gap-2.5 px-4 pb-[clamp(28px,6vh,56px)]">
             <CoupleLockup onPhoto />
-            <h1 className="m-0 grid justify-items-center gap-2 font-display text-[clamp(1rem,4vw,1.4rem)] leading-tight font-medium tracking-[0.2em] text-ivory uppercase">
-              The Making of
-              <Wordmark className="w-[min(78vw,420px)] text-ivory [filter:drop-shadow(0_2px_12px_rgb(0_0_0/0.45))]" />
-            </h1>
-            <div className="font-display text-[clamp(0.8rem,3.4vw,1.05rem)] tracking-[0.16em] text-ivory">{dateLine}</div>
             {content.hero.note && <p className="m-0 max-w-[30em] text-xl text-ivory italic">{content.hero.note}</p>}
-            <Countdown startsAt={church.startsAt} />
           </div>
         </header>
       ) : (
@@ -110,28 +104,20 @@ export function HomeView() {
           <div className="motion-safe:animate-rise [animation-delay:80ms]">
             <CoupleLockup />
           </div>
-          <Rule />
-          <h1 className="mx-0 grid justify-items-center font-display text-[clamp(1.2rem,4.6vw,2rem)] leading-tight font-medium tracking-[0.2em] text-gold uppercase motion-safe:animate-rise [animation-delay:160ms]">
-            The Making of
-            <Wordmark className="mt-3 w-[min(86vw,520px)] text-ivory" />
-          </h1>
-          <div className="mt-5 font-display text-[clamp(0.95rem,3vw,1.15rem)] tracking-[0.18em] text-ivory">{dateLine}</div>
           {content.hero.note && <p className="lede mt-4 italic">{content.hero.note}</p>}
-          <Countdown startsAt={church.startsAt} />
           <Sprig className="-right-2 -bottom-24 rotate-180" />
         </header>
       )}
 
       <main className="mx-auto max-w-[760px]">
-        <section id="invitation" className="pt-5 text-center">
+        <section id="invitation" className="pt-8 text-center">
           <div className="eyebrow">You are invited to</div>
-          <h2 className="mt-3 mb-0 grid justify-items-center gap-2.5 font-display text-[clamp(0.95rem,3vw,1.15rem)] font-medium tracking-[0.22em] text-gold uppercase">
+          <h1 className="mt-3 mb-0 grid justify-items-center gap-3 font-display text-[clamp(1rem,3.4vw,1.25rem)] font-medium tracking-[0.22em] text-gold uppercase">
             The Making of
-            <Wordmark className="w-[min(80vw,400px)] text-ivory" />
-          </h2>
-          <p className="m-0 mt-4 font-ui text-[clamp(1.25rem,4.4vw,1.7rem)] font-normal tracking-[0.14em] text-ivory uppercase">
-            {c.bride} <span className="text-gold">&amp;</span> {c.groom}
-          </p>
+            <Wordmark className="w-[min(84vw,460px)] text-ivory" />
+          </h1>
+          <div className="mt-5 font-display text-[clamp(0.9rem,3.2vw,1.1rem)] tracking-[0.16em] text-ivory">{dateLine}</div>
+          <Countdown startsAt={church.startsAt} />
           <div className="mt-6 flex justify-center">
             <Button asChild size="lg" className="ui-caps h-12 rounded-[2px] px-7 text-[0.78rem] tracking-[0.22em]">
               <a href="/invitation">Read the invitation</a>
@@ -186,13 +172,7 @@ export function HomeView() {
 
         <Frame id="story">
           <div className="eyebrow">Our story</div>
-          <h2 className="mt-3 mb-0 grid justify-items-center gap-2.5 font-display text-[clamp(0.95rem,3vw,1.15rem)] font-medium tracking-[0.22em] text-gold uppercase">
-            The Making of
-            <Wordmark className="w-[min(72vw,340px)] text-ivory" />
-          </h2>
-          <p className="mx-0 mt-4 mb-3.5 font-ui text-[clamp(1.1rem,3.8vw,1.4rem)] font-normal tracking-[0.14em] text-ivory uppercase">
-            {c.bride} <span className="text-gold">&amp;</span> {c.groom}
-          </p>
+          <h2 className="display mt-2.5 mb-3.5 text-[clamp(1.25rem,3.6vw,1.6rem)]">Two lives, one new chapter</h2>
           <p className="lede">A new chapter begins as Sarah and Damilare bring their families, promises and futures together under one name: Oluwabioye.</p>
           {content.story.length ? (
             <StoryTimeline moments={content.story} />
