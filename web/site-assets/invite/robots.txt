@@ -1,0 +1,3 @@
+# The invite site is private: nothing on it should be indexed.
+User-agent: *
+Disallow: /

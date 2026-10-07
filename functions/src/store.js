@@ -65,8 +65,9 @@ function jsonBackend() {
   const path = require('path');
   const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data');
   const FILE = path.join(DATA_DIR, 'guests.json');
-  let state = { guests: [], activity: [], publicRsvps: [], settings: {} };
+  let state = { guests: [], activity: [], publicRsvps: [], settings: {}, messages: [] };
   let queue = Promise.resolve();
+  const limits = new Map();
   fs.mkdirSync(DATA_DIR, { recursive: true });
   if (fs.existsSync(FILE)) state = { ...state, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) };
   const persistNow = () => { fs.writeFileSync(FILE + '.tmp', JSON.stringify(state, null, 2)); fs.renameSync(FILE + '.tmp', FILE); };
@@ -106,6 +107,8 @@ function jsonBackend() {
     },
     async markSent(g, via) { return patch(g.id, { sentAt: g.sentAt || now() }, 'sent', via || g.channel); },
     async unmarkSent(g) { return patch(g.id, { sentAt: null }); },
+    async setWa(id, p, logType, extra) { return patch(id, p, logType, extra); },
+    async byWaId(wid) { const g = state.guests.find((x) => x.waMessageId === wid); return g ? { ...g } : null; },
     async markOpened(g) {
       const cur = find(g.id);
       return patch(g.id, { openCount: (cur.openCount || 0) + 1, openedAt: cur.openedAt || now() }, cur.openedAt ? null : 'opened');
@@ -134,6 +137,31 @@ function jsonBackend() {
 
     async getSettings() { return JSON.parse(JSON.stringify(state.settings || {})); },
     async saveSettings(obj) { state.settings = obj; await persist(); },
+    async logActivity(type, g, extra) { log(type, g, extra); await persist(); },
+    // WhatsApp conversations: one record per message, in or out, grouped by thread (a guest id, or p:<number>).
+    async addMessage(m) {
+      state.messages ||= [];
+      if (state.messages.some((x) => x.id === m.id)) return false; // Meta retries webhooks
+      state.messages.push({ ...m });
+      if (state.messages.length > 5000) state.messages = state.messages.slice(-5000);
+      await persist();
+      return true;
+    },
+    async messages({ thread, limit = 1000 } = {}) {
+      const all = (state.messages || []).filter((m) => !thread || m.thread === thread);
+      return all.slice(-limit).map((m) => ({ ...m }));
+    },
+    async updateMessage(id, p) {
+      const m = (state.messages || []).find((x) => x.id === id);
+      if (!m) return null;
+      Object.assign(m, p);
+      await persist();
+      return { ...m };
+    },
+    async markThreadRead(thread) {
+      (state.messages || []).forEach((m) => { if (m.thread === thread && m.dir === 'in') m.read = true; });
+      await persist();
+    },
     async saveMedia(buf, type) {
       const id = crypto.randomBytes(10).toString('hex') + (type === 'image/png' ? '.png' : type === 'image/webp' ? '.webp' : '.jpg');
       fs.mkdirSync(path.join(DATA_DIR, 'media'), { recursive: true });
@@ -143,6 +171,18 @@ function jsonBackend() {
     async readMedia(id) {
       const f = path.join(DATA_DIR, 'media', path.basename(id));
       return fs.existsSync(f) ? { buf: fs.readFileSync(f) } : null;
+    },
+
+    // Attempt counters for the invitation-code limiter. In memory: the JSON store is a single process.
+    async attempts(key) {
+      const a = limits.get(key);
+      return a && a.resetAt > Date.now() ? a.count : 0;
+    },
+    async addAttempt(key, windowMs) {
+      const a = limits.get(key);
+      if (a && a.resetAt > Date.now()) a.count++;
+      else limits.set(key, { count: 1, resetAt: Date.now() + windowMs });
+      if (limits.size > 10000) limits.clear();
     },
   };
 }
@@ -158,6 +198,7 @@ function firestoreBackend() {
   const pub = db.collection('churchRsvps');
   const data = (snap) => (snap.exists ? snap.data() : null);
   const log = (type, g, extra = '') => acts.add({ at: now(), type, guestId: g?.id || null, name: g?.name || '', extra }).catch((e) => console.error(e));
+  const msgDoc = (id) => db.collection('messages').doc(crypto.createHash('sha256').update(String(id)).digest('hex').slice(0, 40));
   const patch = async (id, p, logType, extra) => {
     const ref = guests.doc(id);
     await ref.update(p);
@@ -205,6 +246,11 @@ function firestoreBackend() {
     },
     async markSent(g, via) { return patch(g.id, { sentAt: g.sentAt || now() }, 'sent', via || g.channel); },
     async unmarkSent(g) { return patch(g.id, { sentAt: null }); },
+    async setWa(id, p, logType, extra) { return patch(id, p, logType, extra); },
+    async byWaId(wid) {
+      const s = await guests.where('waMessageId', '==', String(wid)).limit(1).get();
+      return s.empty ? null : s.docs[0].data();
+    },
     async markOpened(g) {
       const first = !g.openedAt;
       const p = { openCount: FieldValue.increment(1) };
@@ -241,6 +287,28 @@ function firestoreBackend() {
     // Site content edited in /admin/site
     async getSettings() { return data(await db.collection('settings').doc('site').get()) || {}; },
     async saveSettings(obj) { await db.collection('settings').doc('site').set(obj); },
+    async logActivity(type, g, extra) { await log(type, g, extra); },
+    // WhatsApp conversations (sorted in memory, so no composite indexes are needed). WhatsApp ids can
+    // contain "/", which a document id can't, so documents are keyed by a hash of the id.
+    async addMessage(m) {
+      try { await msgDoc(m.id).create(m); return true; } catch (e) { if (e.code === 6) return false; throw e; }
+    },
+    async messages({ thread, limit = 1000 } = {}) {
+      const q = thread ? db.collection('messages').where('thread', '==', thread) : db.collection('messages').orderBy('at', 'desc').limit(limit);
+      const rows = (await q.get()).docs.map((d) => d.data());
+      return rows.sort((a, b) => String(a.at).localeCompare(String(b.at))).slice(-limit);
+    },
+    async updateMessage(id, p) {
+      const ref = msgDoc(id);
+      try { await ref.update(p); } catch (e) { if (e.code === 5) return null; throw e; }
+      return data(await ref.get());
+    },
+    async markThreadRead(thread) {
+      const snap = await db.collection('messages').where('thread', '==', thread).where('read', '==', false).get();
+      const batch = db.batch();
+      snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
+      if (!snap.empty) await batch.commit();
+    },
     // Photos live in Firestore (each under 1 MB after in-browser resizing) and are served
     // through /media/<id> with a long CDN cache, so there is no separate Storage bucket to set up.
     async saveMedia(buf, type) {
@@ -251,6 +319,22 @@ function firestoreBackend() {
     async readMedia(id) {
       const d = data(await db.collection('media').doc(String(id)).get());
       return d ? { buf: Buffer.from(d.bytes) } : null;
+    },
+
+    // Attempt counters for the invitation-code limiter. Kept in Firestore so the limit holds across
+    // function instances. expireAt lets an optional Firestore TTL policy tidy old documents.
+    async attempts(key) {
+      const d = data(await db.collection('limits').doc(key).get());
+      return d && d.resetAt > Date.now() ? d.count : 0;
+    },
+    async addAttempt(key, windowMs) {
+      const ref = db.collection('limits').doc(key);
+      await db.runTransaction(async (tx) => {
+        const d = data(await tx.get(ref));
+        const t = Date.now();
+        if (d && d.resetAt > t) tx.update(ref, { count: d.count + 1 });
+        else tx.set(ref, { count: 1, resetAt: t + windowMs, expireAt: new Date(t + windowMs + 864e5) });
+      });
     },
   };
 }

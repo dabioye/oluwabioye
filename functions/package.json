@@ -2,14 +2,11 @@
   "name": "sarah-and-damilare",
   "version": "1.0.0",
   "private": true,
-  "description": "Wedding website, personal invitations, RSVP, invitation tracker and gate check-in for Sarah & Damilare",
+  "description": "JSON API behind the wedding websites: invitations, RSVP, invitation tracker, website editor and gate check-in",
   "main": "index.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch --env-file=.env.local server.js",
     "test": "node test/smoke.js",
-    "test:firestore": "firebase emulators:exec --only firestore --project demo-wedding \"STORE=firestore GCLOUD_PROJECT=demo-wedding node test/smoke.js\"",
-    "deploy": "firebase deploy --only hosting,functions,firestore"
+    "test:firestore": "firebase emulators:exec --only firestore --project demo-wedding \"STORE=firestore GCLOUD_PROJECT=demo-wedding node test/smoke.js\""
   },
   "engines": {
     "node": "22"

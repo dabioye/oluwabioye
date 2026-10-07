@@ -1,1 +1,11 @@
-{ "projects": { "default": "sarahanddamilare" } }
+{
+  "projects": { "default": "sarahanddamilare" },
+  "targets": {
+    "sarahanddamilare": {
+      "hosting": {
+        "public": ["sarahanddamilare"],
+        "invite": ["oluwabioye-invite"]
+      }
+    }
+  }
+}

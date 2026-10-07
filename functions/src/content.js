@@ -1,5 +1,5 @@
 // Site content that can be edited from /admin/site. Defaults come from config.js;
-// saved edits are merged over them at request time (cached briefly per instance).
+// saved edits are merged over them when read (cached briefly per instance).
 const cfg = require('./config');
 const store = require('./store');
 
@@ -7,6 +7,8 @@ const defaults = JSON.parse(JSON.stringify({
   hero: cfg.hero, story: cfg.story, gallery: cfg.gallery, registryUrl: cfg.registryUrl,
   giftsMessage: cfg.gifts.message, publicNotes: cfg.publicNotes, rsvpBy: cfg.rsvpBy,
   invitationArt: { church: cfg.invitationArt.church, trad: cfg.invitationArt.trad }, intro: cfg.intro,
+  waAutoSend: false,
+  nameFont: 'Cookie',
 }));
 
 const str = (v, max = 2000) => String(v ?? '').trim().slice(0, max);
@@ -27,6 +29,8 @@ function sanitize(input = {}) {
   if ('rsvpBy' in input && /^\d{4}-\d{2}-\d{2}$/.test(str(input.rsvpBy))) out.rsvpBy = str(input.rsvpBy);
   if (input.invitationArt) out.invitationArt = { church: url(input.invitationArt.church), trad: url(input.invitationArt.trad) };
   if (input.intro) out.intro = { home: !!input.intro.home, invite: !!input.intro.invite };
+  if ('waAutoSend' in input) out.waAutoSend = !!input.waAutoSend;
+  if (cfg.nameFonts.includes(input.nameFont)) out.nameFont = input.nameFont;
   return out;
 }
 
@@ -41,18 +45,33 @@ async function current() {
   return cache;
 }
 
-// Copy the current content onto the shared config object the page templates read.
-async function apply() {
-  const c = await current();
-  cfg.hero = { ...cfg.hero, ...c.hero };
-  cfg.story = c.story;
-  cfg.gallery = c.gallery;
-  cfg.registryUrl = c.registryUrl;
-  cfg.gifts = { ...cfg.gifts, message: c.giftsMessage };
-  cfg.publicNotes = c.publicNotes;
-  cfg.rsvpBy = c.rsvpBy;
-  cfg.invitationArt = { ...cfg.invitationArt, church: c.invitationArt.church || defaults.invitationArt.church, trad: c.invitationArt.trad || defaults.invitationArt.trad };
-  cfg.intro = c.intro;
+// What the public church site may see. Nothing about the traditional wedding goes in here.
+function publicView(c) {
+  return {
+    hero: { photo: c.hero?.photo || defaults.hero.photo, note: c.hero?.note || '' },
+    story: c.story || [],
+    gallery: c.gallery || [],
+    registryUrl: c.registryUrl || defaults.registryUrl,
+    giftsMessage: c.giftsMessage || '',
+    publicNotes: c.publicNotes || [],
+    rsvpBy: c.rsvpBy,
+    invitationArt: { church: c.invitationArt?.church || defaults.invitationArt.church },
+    intro: { home: c.intro?.home !== false },
+  };
+}
+
+// Extra content for a private traditional-wedding invitation.
+function inviteView(c) {
+  return {
+    art: c.invitationArt?.trad || defaults.invitationArt.trad,
+    nameSlot: cfg.invitationArt.nameSlot,
+    codeSlot: cfg.invitationArt.codeSlot,
+    notes: cfg.notes,
+    rsvpBy: c.rsvpBy,
+    intro: c.intro?.invite !== false,
+    registryUrl: c.registryUrl || defaults.registryUrl,
+    nameFont: c.nameFont || defaults.nameFont,
+  };
 }
 
 async function save(input) {
@@ -62,4 +81,4 @@ async function save(input) {
   return { ...defaults, ...merged };
 }
 
-module.exports = { apply, current, save, sanitize, defaults };
+module.exports = { current, save, sanitize, publicView, inviteView, defaults };

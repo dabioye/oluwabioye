@@ -44,8 +44,8 @@ module.exports = {
   },
 
   colours: [
-    { name: 'Navy', hex: '#14213A' },
-    { name: 'Champagne Gold', hex: '#C9A56B' },
+    { name: 'Navy Blue', hex: '#14213A' },
+    { name: 'Champagne', hex: '#C9A56B' },
   ],
 
   rsvpBy: '2026-11-30',
@@ -65,7 +65,7 @@ module.exports = {
   churchRsvp: { open: false, maxParty: 6 },
 
   // Gift registry on withjoy.com. Paste your registry link here.
-  registryUrl: '',
+  registryUrl: 'https://wishgum.com/w/sarahdamilare_',
 
   // Shown only on private traditional-wedding invitations (/i/CODE).
   notes: [
@@ -78,9 +78,10 @@ module.exports = {
   // Add the couple's story here when the final copy is ready.
   story: [],
 
-  // Full-screen couple photo at the top of the homepage. Leave photo '' to use the monogram header.
+  // Full-screen couple photo at the top of the homepage (public site only: web/site-assets/public/img).
+  // A photo uploaded in Edit website replaces it.
   hero: {
-    photo: '', // e.g. '/img/couple.jpg' (portrait, at least 1200px tall)
+    photo: '/img/couple.jpg',
     note: '',  // short personal welcome, e.g. 'We can’t wait to celebrate with you.'
   },
 
@@ -96,7 +97,10 @@ module.exports = {
   invitationArt: {
     church: '/img/invite-church.jpg',
     trad: '/img/invite-trad.jpg',
-    nameSlot: { top: 23.3, maxSize: 7.6 }, // where the name sits on the trad card (% from top, size in % of card width)
+    // Where the guest's name sits on the trad card (% from top, size in % of card width): the gap under "Cordially invites".
+    nameSlot: { top: 21.75, maxSize: 7.6 },
+    // Where the guest's access code is written, under "Access Code:" (% from top and left, size in % of card width).
+    codeSlot: { top: 78.9, left: 30.8, size: 3.6 },
   },
 
   // Gifts section on the homepage. Shows the registry button plus any accounts listed here.
@@ -109,6 +113,11 @@ module.exports = {
 
   // WhatsApp / SMS invitation text. {name}, {link}, {rsvpBy} are filled in per guest.
   // This is for the private traditional wedding invitation.
+  // Script fonts the website editor offers for guests' names on the traditional card.
+  nameFonts: ['Pinyon Script', 'Cookie', 'MonteCarlo', 'Lavishly Yours'],
+
+  // WhatsApp Business (Cloud API): the sending number and the approved template. The token is the WHATSAPP_TOKEN secret.
+  whatsapp: { phoneNumberId: '1170328419507856', template: 'oluwabioye_invitation' },
   inviteMessage:
     'Dear {name},\n\nSarah & Damilare joyfully invite you to The Making of Oluwabioye, our traditional wedding and reception, on {weekday}, 17 December 2026 at 2:00 PM in Lagos.\n\nThis invitation is personal to you. Please don\'t share the link.\nYour invitation, RSVP and access card: {link}\n\nKindly RSVP by {rsvpBy}.\n\n#TheMakingOfOluwabioye',
 };

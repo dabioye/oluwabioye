@@ -3,13 +3,60 @@ name: Test and deploy to Firebase
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
+    inputs:
+      only:
+        description: 'What to deploy (firebase deploy --only). Default: everything.'
+        required: false
+        default: 'hosting,functions,firestore'
 
-concurrency: deploy
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            functions/package-lock.json
+            web/package-lock.json
+
+      - name: API tests
+        working-directory: functions
+        run: npm ci && npm test
+
+      - name: Install web
+        working-directory: web
+        run: npm ci
+      - name: Lint, types, format and unit tests
+        working-directory: web
+        run: npm run lint && npm run typecheck && npm run format:check && npm test
+      - name: Build both sites
+        working-directory: web
+        run: npm run build
+      - name: Browser tests
+        working-directory: web
+        run: npx playwright install --with-deps chromium && npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: web/test-results
+          retention-days: 7
+
+  deploy:
+    needs: test
+    # Deploys on every push to main, or by hand (Actions → Run workflow) with an optional --only.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    concurrency: deploy
     env:
       SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
     steps:
@@ -18,18 +65,24 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: functions/package-lock.json
+          cache-dependency-path: |
+            functions/package-lock.json
+            web/package-lock.json
       - run: npm ci
         working-directory: functions
-      - run: npm test
-        working-directory: functions
+      - run: npm ci && npm run build
+        working-directory: web
       - name: Write non-secret settings for the function
         run: |
           echo "BASE_URL=${{ vars.BASE_URL || 'https://sarahanddamilare.dabioye.com' }}" > functions/.env
           echo "INVITE_URL=${{ vars.INVITE_URL || 'https://oluwabioye.dabioye.com' }}" >> functions/.env
+          echo "WHATSAPP_PHONE_ID=${{ vars.WHATSAPP_PHONE_ID || 'none' }}" >> functions/.env
+          echo "WHATSAPP_TEMPLATE=${{ vars.WHATSAPP_TEMPLATE || 'oluwabioye_invitation' }}" >> functions/.env
+          echo "WHATSAPP_HEADER_IMAGE=${{ vars.WHATSAPP_HEADER_IMAGE || 'none' }}" >> functions/.env
+          echo "WHATSAPP_ALERT_TO=${{ vars.WHATSAPP_ALERT_TO || 'none' }}" >> functions/.env
       - name: Deploy
         if: env.SA != ''
         run: |
           printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
-          npx --yes firebase-tools@15 deploy --only hosting,functions,firestore --project sarahanddamilare --non-interactive --force
+          npx --yes firebase-tools@15 deploy --only "${{ inputs.only || 'hosting,functions,firestore' }}" --project sarahanddamilare --non-interactive --force
