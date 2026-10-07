@@ -27,7 +27,7 @@ export function StoryView() {
         <header className="relative overflow-hidden px-4 pt-[clamp(34px,8vw,72px)] pb-[clamp(38px,8vw,76px)] text-center">
           <div className="eyebrow">Our story</div>
           <Monogram className="mt-3 mb-1 text-[#16243d]" />
-          <p className="m-0 font-script text-[clamp(2rem,7vw,3rem)] leading-tight text-[#82663d]">
+          <p className="m-0 font-lavish text-[clamp(2.3rem,8vw,3.4rem)] leading-tight text-[#82663d]">
             {c.bride} &amp; {c.groom}
           </p>
           <Rule />
@@ -48,7 +48,7 @@ export function StoryView() {
             On {longDate(cfg.date)}, we gather in Lagos to witness this new chapter and celebrate all that brought us here.
           </p>
           <StoryTimeline moments={content.story} />
-          <p className="mx-0 mt-8 mb-0 font-script text-[clamp(2rem,7vw,3rem)] leading-tight text-[#82663d]">
+          <p className="mx-0 mt-8 mb-0 font-lavish text-[clamp(2.3rem,8vw,3.4rem)] leading-tight text-[#82663d]">
             With love,
             <br />
             {c.bride} &amp; {c.groom}
