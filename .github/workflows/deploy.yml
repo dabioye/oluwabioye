@@ -80,6 +80,7 @@ jobs:
           echo "WHATSAPP_TEMPLATE=${{ vars.WHATSAPP_TEMPLATE || 'oluwabioye_invitation' }}" >> functions/.env
           echo "WHATSAPP_HEADER_IMAGE=${{ vars.WHATSAPP_HEADER_IMAGE || 'none' }}" >> functions/.env
           echo "WHATSAPP_ALERT_TO=${{ vars.WHATSAPP_ALERT_TO || 'none' }}" >> functions/.env
+          echo "WHATSAPP_WABA_ID=${{ vars.WHATSAPP_WABA_ID || 'none' }}" >> functions/.env
       - name: Deploy
         if: env.SA != ''
         run: |

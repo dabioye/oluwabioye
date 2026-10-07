@@ -245,10 +245,14 @@ async function status() {
   out.phone = phone;
   if (phone.error) out.problems.push(`Phone number: ${phone.error}`);
   if (info.expiresAt) out.problems.push(`The access token expires on ${info.expiresAt.slice(0, 10)}. Make one that never expires.`);
-  if (t.error) out.problems.push(`Couldn’t read the template (${t.error}); using the README layout in ${settings().lang}.`);
+  if (t.error)
+    out.problems.push(
+      `Couldn’t read the template (${t.error}), so messages use the README layout and WhatsApp may drop them. Give the system user the WhatsApp account with full control and make a new token, or set WHATSAPP_WABA_ID.`,
+    );
   else if (t.status !== 'APPROVED') out.problems.push(`The template is ${String(t.status).toLowerCase()} in WhatsApp Manager, not approved.`);
   out.template = describe(t.error ? fallbackTemplate() : t);
-  out.ready = !phone.error && (t.error ? true : t.status === 'APPROVED');
+  // Not ready until the approved template is read: a guessed layout is accepted by Meta, then silently dropped.
+  out.ready = !phone.error && !t.error && t.status === 'APPROVED';
   return out;
 }
 
