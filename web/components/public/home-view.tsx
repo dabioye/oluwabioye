@@ -70,7 +70,6 @@ export function HomeIntro() {
 export function HomeView() {
   const { content } = useSiteContent();
   const photo = content.hero.photo;
-  const hasGallery = content.gallery.length > 0;
 
   return (
     <>
@@ -78,7 +77,7 @@ export function HomeView() {
         links={[
           { href: '/invitation', label: 'Invitation' },
           { href: '/our-story', label: 'Our Story' },
-          ...(hasGallery ? [{ href: '#gallery', label: 'Gallery' }] : []),
+          { href: '#gallery', label: 'Gallery' },
           { href: content.registryUrl || '#gifts', label: 'Gift Registry', external: !!content.registryUrl },
         ]}
       />
@@ -190,13 +189,15 @@ export function HomeView() {
           </div>
         </Frame>
 
-        {hasGallery && (
-          <Frame id="gallery">
-            <div className="eyebrow">Gallery</div>
-            <h2 className="display mt-2.5 text-[clamp(1.25rem,3.6vw,1.6rem)]">Moments so far</h2>
+        <Frame id="gallery">
+          <div className="eyebrow">Gallery</div>
+          <h2 className="display mt-2.5 text-[clamp(1.25rem,3.6vw,1.6rem)]">Moments so far</h2>
+          {content.gallery.length ? (
             <Gallery photos={content.gallery} />
-          </Frame>
-        )}
+          ) : (
+            <p className="lede mt-4 italic">Photos are coming soon. Check back as the celebration draws near.</p>
+          )}
+        </Frame>
 
         <Registry content={content} />
 
@@ -209,7 +210,7 @@ export function HomeView() {
       <Dock
         items={[
           { href: '/our-story', icon: BookOpen, label: 'Our story' },
-          hasGallery && { href: '#gallery', icon: Camera, label: 'Gallery' },
+          { href: '#gallery', icon: Camera, label: 'Gallery' },
           content.registryUrl
             ? { href: content.registryUrl, icon: Gift, label: 'Registry', external: true }
             : { href: '#gifts', icon: Gift, label: 'Registry' },

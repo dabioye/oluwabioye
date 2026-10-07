@@ -20,6 +20,7 @@ export function StoryView() {
         links={[
           { href: '/', label: 'Home' },
           { href: '/invitation', label: 'Invitation' },
+          { href: '/#gallery', label: 'Gallery' },
           { href: content.registryUrl || '/#gifts', label: 'Gift Registry', external: !!content.registryUrl },
         ]}
       />
