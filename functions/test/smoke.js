@@ -182,7 +182,7 @@ const store = require('../src/store');
   assert.deepEqual(await r.json(), { configured: false, ready: false, autoSend: false });
   r = await req('/api/admin/guests', json('POST', { name: 'No Api Yet', phone: '08030000001' }, admin));
   assert.equal((await r.json()).whatsapp, null, 'no send before API is configured');
-  Object.assign(process.env, { WHATSAPP_TOKEN: 'tok', WHATSAPP_PHONE_ID: 'PHONE1', WHATSAPP_APP_SECRET: 'appsecret', WHATSAPP_VERIFY_TOKEN: 'verifyme' });
+  Object.assign(process.env, { WHATSAPP_TOKEN: 'tok', WHATSAPP_PHONE_ID: 'PHONE1', WHATSAPP_WABA_ID: 'WABA1', WHATSAPP_APP_SECRET: 'appsecret', WHATSAPP_VERIFY_TOKEN: 'verifyme' });
   r = await req('/api/admin/guests', json('POST', { name: 'Not Auto', phone: '08030000002' }, admin));
   assert.equal((await r.json()).whatsapp, null, 'auto-send is off by default');
 

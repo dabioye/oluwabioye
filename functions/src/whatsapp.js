@@ -69,7 +69,8 @@ let cached = {}; // name -> { at, value }
 async function template({ fresh = false, name = settings().template } = {}) {
   const hit = cached[name];
   if (!fresh && hit && Date.now() - hit.at < 10 * 60e3) return hit.value;
-  const accounts = env('WHATSAPP_WABA_ID') ? [env('WHATSAPP_WABA_ID')] : (await tokenInfo()).accounts;
+  const waba = env('WHATSAPP_WABA_ID') || cfg.whatsapp.businessAccountId;
+  const accounts = waba ? [waba] : (await tokenInfo()).accounts;
   if (!accounts.length) throw new WhatsAppError('The access token can’t see any WhatsApp Business account');
   const found = [];
   for (const id of accounts) {
