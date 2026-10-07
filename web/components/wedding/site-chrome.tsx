@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { MessageCircle, Phone } from 'lucide-react';
 
 /** Sticky top navigation with small-caps links. */
-export function SiteNav({ links, className }: { links: { href: string; label: string }[]; className?: string }) {
+export function SiteNav({ links, className }: { links: { href: string; label: string; external?: boolean }[]; className?: string }) {
   return (
     <nav
       aria-label="Sections"
@@ -12,7 +12,12 @@ export function SiteNav({ links, className }: { links: { href: string; label: st
     >
       <div className="ui-caps mx-auto flex max-w-[760px] flex-wrap justify-center gap-x-6 gap-y-1 py-3.5 text-[0.74rem] tracking-[0.24em]">
         {links.map((l) => (
-          <a key={l.href} href={l.href} className="py-1.5 text-ivory-dim no-underline transition-colors hover:text-gold">
+          <a
+            key={l.href}
+            href={l.href}
+            {...(l.external ? { target: '_blank', rel: 'noopener' } : {})}
+            className="py-1.5 text-ivory-dim no-underline transition-colors hover:text-gold"
+          >
             {l.label}
           </a>
         ))}

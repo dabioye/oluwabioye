@@ -332,7 +332,8 @@ async function receive(msg, profileName) {
 
 /** When the 24-hour window for free-text replies closes (null if the guest has never written). */
 function windowUntil(messages) {
-  const lastIn = [...messages].reverse().find((m) => m.dir === 'in');
+  // Only a WhatsApp message from the guest opens the window; an RSVP note from their invitation page doesn't.
+  const lastIn = [...messages].reverse().find((m) => m.dir === 'in' && m.type !== 'rsvp');
   return lastIn ? new Date(new Date(lastIn.at).getTime() + DAY).toISOString() : null;
 }
 
@@ -351,6 +352,14 @@ async function reply(thread, text) {
   const m = { id: r.messages?.[0]?.id || `local-${crypto.randomUUID()}`, thread, guestId: g?.id || null, name: g?.name || history[0]?.name || `+${to}`, phone: to, dir: 'out', type: 'text', text: body, at: new Date().toISOString(), status: 'accepted', read: true };
   await store.addMessage(m);
   return m;
+}
+
+/** An RSVP sent from the invitation page, with its note, lands in the guest's inbox thread too. */
+async function rsvpToInbox(g, response, note) {
+  const text = [response === 'yes' ? 'RSVP: Joyfully accepts' : 'RSVP: Regretfully declines', String(note || '').trim()].filter(Boolean).join('\n\n');
+  const at = new Date().toISOString();
+  await store.addMessage({ id: `rsvp-${g.id}-${Date.now()}`, thread: g.id, guestId: g.id, name: g.name, phone: toWaNumber(g.phone), dir: 'in', type: 'rsvp', text, at, read: false });
+  await alert(g.name, text, g.id).catch((e) => console.error('WhatsApp alert failed:', e.message));
 }
 
 // ---------- alerts to the couple's own phone ----------
@@ -382,6 +391,6 @@ async function alert(name, text, thread) {
 
 module.exports = {
   configured, status, preview, needsCard, sendInvite, sendMany, eligible, toWaNumber, setValues,
-  verifyChallenge, signatureOk, handleWebhook, reply, windowUntil, setInboxLink, WhatsAppError,
+  verifyChallenge, signatureOk, handleWebhook, reply, windowUntil, rsvpToInbox, setInboxLink, WhatsAppError,
   _setFetch: (f) => (fetchImpl = f), _reset: () => (cached = {}),
 };

@@ -1,5 +1,5 @@
 'use client';
-import { nameLayout, type CodeSlot, type NameSlot } from './invitation';
+import { nameFont, nameLayout, type CodeSlot, type NameSlot } from './invitation';
 
 // Draws a guest's personalised traditional invitation (card + name + access code) as a JPEG,
 // placed exactly like the card on their invitation page, so it can be sent with the WhatsApp message.
@@ -23,19 +23,20 @@ function loadImage(src: string) {
   return p;
 }
 
-const fontsReady = () => Promise.all([document.fonts.load('400 48px "Pinyon Script"'), document.fonts.load('500 48px "Bodoni Moda"')]).catch(() => []);
+const fontsReady = (family = 'Pinyon Script') =>
+  Promise.all([document.fonts.load(`400 48px "${family}"`), document.fonts.load('500 48px "Bodoni Moda"')]).catch(() => []);
 
 /** Load the card image and fonts ahead of time so sending is instant. */
-export function preloadCard(src: string) {
+export function preloadCard(src: string, font?: string) {
   if (!src) return;
   loadImage(src).catch(() => {});
-  fontsReady();
+  fontsReady(nameFont(font).family);
 }
 
-export type CardInput = { src: string; name: string; code: string; nameSlot: NameSlot; codeSlot: CodeSlot };
+export type CardInput = { src: string; name: string; code: string; nameSlot: NameSlot; codeSlot: CodeSlot; font?: string };
 
-export async function renderCard({ src, name, code, nameSlot, codeSlot }: CardInput): Promise<Blob> {
-  const [img] = await Promise.all([loadImage(src), fontsReady()]);
+export async function renderCard({ src, name, code, nameSlot, codeSlot, font }: CardInput): Promise<Blob> {
+  const [img] = await Promise.all([loadImage(src), fontsReady(nameFont(font).family)]);
   const W = img.naturalWidth;
   const H = img.naturalHeight;
   const c = document.createElement('canvas');
@@ -48,9 +49,9 @@ export async function renderCard({ src, name, code, nameSlot, codeSlot }: CardIn
   x.textBaseline = 'middle';
 
   // Guest name: same sizes as the web card (sizes are % of card width).
-  const n = nameLayout(name, nameSlot);
+  const n = nameLayout(name, nameSlot, font);
   const namePx = (n.size / 100) * W;
-  x.font = `400 ${namePx}px "Pinyon Script", cursive`;
+  x.font = `400 ${namePx}px "${n.family}", cursive`;
   x.shadowColor = 'rgba(0,0,0,0.5)';
   x.shadowBlur = namePx * 0.08;
   x.shadowOffsetY = namePx * 0.03;

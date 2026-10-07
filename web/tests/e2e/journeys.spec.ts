@@ -77,9 +77,18 @@ test('guest enters their code, is remembered, RSVPs and gets their access card',
   await expect(page.locator('#invitation').getByText(g.code)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Traditional Wedding & Reception' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Directions' }).first()).toHaveAttribute('href', /Sickle\+Cell/);
-  await expect(page.getByRole('heading', { name: 'Will you join us, Tope?' })).toBeVisible();
-  await page.getByLabel('A note for the couple').fill('Can’t wait!');
-  await page.getByRole('button', { name: 'Send RSVP' }).click();
+  // The church ceremony follows, and the nav leads to the story and the registry on the public site.
+  await expect(page.getByRole('heading', { name: 'Wedding Ceremony', exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Our Story' })).toHaveAttribute('href', `${PUBLIC}/our-story`);
+  await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Gift Registry' })).toBeVisible();
+
+  // RSVP: a declining guest is asked for a reason; accepting sends straight away, with the note.
+  await expect(page.getByRole('heading', { name: 'Send RSVP' })).toBeVisible();
+  await expect(page.locator('#respond')).toContainText('Kindly respond by 30 November 2026');
+  await page.getByRole('button', { name: 'Regretfully Decline' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Kindly tell us why' })).toBeVisible();
+  await page.getByLabel('A note for Sarah & Damilare').fill('Can’t wait!');
+  await page.getByRole('button', { name: 'Joyfully Accept' }).click();
   await expect(page.getByText('Attending', { exact: true })).toBeVisible();
   await expect(page.locator('#card').getByText('Access card', { exact: true })).toBeVisible();
   await expect(page.getByText('Driver’s meal card')).toBeVisible();

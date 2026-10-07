@@ -1,6 +1,7 @@
 'use client';
 import { Button } from '@/components/ui/button';
 import { Monogram } from '@/components/wedding/monogram';
+import { Wordmark } from '@/components/wedding/wordmark';
 import { Frame, Rule } from '@/components/wedding/ornaments';
 import { PaperPage } from '@/components/wedding/paper';
 import { SiteFooter, SiteNav } from '@/components/wedding/site-chrome';
@@ -30,10 +31,9 @@ export function StoryView() {
             {c.bride} &amp; {c.groom}
           </p>
           <Rule />
-          <h1 className="display m-0 text-[clamp(2.5rem,9vw,5.6rem)] leading-[1.02] !text-[#26334a]">
-            The Making
-            <br />
-            <span className="font-script text-[1.12em] tracking-normal text-[#82663d]">of {c.surname}</span>
+          <h1 className="m-0 grid justify-items-center gap-3 font-display text-[clamp(1.2rem,4.4vw,2rem)] leading-tight font-medium tracking-[0.2em] text-[#82663d] uppercase">
+            The Making of
+            <Wordmark className="w-[min(86vw,620px)] text-[#16243d]" />
           </h1>
           <p className="mx-0 mt-5 mb-0 text-[clamp(1.2rem,4vw,1.55rem)] leading-snug text-muted-foreground italic">Two lives. Two families. One new chapter.</p>
         </header>

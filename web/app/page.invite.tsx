@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { CodeEntry } from '@/components/invite/code-entry';
 import { Monogram } from '@/components/wedding/monogram';
+import { Wordmark } from '@/components/wedding/wordmark';
 import { Frame, Rule } from '@/components/wedding/ornaments';
 import { Contacts, SiteFooter } from '@/components/wedding/site-chrome';
 import { cfg } from '@/lib/config';
@@ -17,7 +18,10 @@ export default function InviteHome() {
           <Monogram className="text-gold motion-safe:animate-rise" />
           <Rule />
           <div className="eyebrow">Strictly by invitation</div>
-          <h1 className="display mt-2.5 text-[clamp(1.7rem,5.5vw,2.6rem)]">The Making of {c.surname}</h1>
+          <h1 className="mt-3 mb-0 grid justify-items-center gap-3 font-display text-[clamp(0.95rem,3vw,1.15rem)] font-medium tracking-[0.22em] text-gold uppercase">
+            The Making of
+            <Wordmark className="w-[min(80vw,420px)] text-ivory" />
+          </h1>
           <p className="lede mt-3.5">This celebration is private. Open the personal link we sent you, or enter your invitation code.</p>
           <CodeEntry />
         </Frame>

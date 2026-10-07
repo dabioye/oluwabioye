@@ -171,7 +171,11 @@ app.get('/api/invite/:code', wrap(async (req, res) => {
 app.post('/api/invite/:code/rsvp', limit(20, 60_000), wrap(async (req, res) => {
   const g = await store.byCode(req.params.code);
   if (!g) return res.status(404).json({ error: 'This link doesn’t match an invitation.' });
-  const updated = await store.setRsvp(g, req.body.response === 'no' ? 'no' : 'yes', req.body.note);
+  const response = req.body.response === 'no' ? 'no' : 'yes';
+  const note = String(req.body.note || '').trim().slice(0, 500);
+  const updated = await store.setRsvp(g, response, note);
+  // The note (and every decline) also comes to the couple's inbox, with an alert on their phone.
+  if (note || response === 'no') await whatsapp.rsvpToInbox(g, response, note);
   res.json({ guest: inviteGuest(updated) });
 }));
 

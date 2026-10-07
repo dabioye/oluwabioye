@@ -8,6 +8,7 @@ const defaults = JSON.parse(JSON.stringify({
   giftsMessage: cfg.gifts.message, publicNotes: cfg.publicNotes, rsvpBy: cfg.rsvpBy,
   invitationArt: { church: cfg.invitationArt.church, trad: cfg.invitationArt.trad }, intro: cfg.intro,
   waAutoSend: false,
+  nameFont: 'Pinyon Script',
 }));
 
 const str = (v, max = 2000) => String(v ?? '').trim().slice(0, max);
@@ -29,6 +30,7 @@ function sanitize(input = {}) {
   if (input.invitationArt) out.invitationArt = { church: url(input.invitationArt.church), trad: url(input.invitationArt.trad) };
   if (input.intro) out.intro = { home: !!input.intro.home, invite: !!input.intro.invite };
   if ('waAutoSend' in input) out.waAutoSend = !!input.waAutoSend;
+  if (cfg.nameFonts.includes(input.nameFont)) out.nameFont = input.nameFont;
   return out;
 }
 
@@ -67,6 +69,8 @@ function inviteView(c) {
     notes: cfg.notes,
     rsvpBy: c.rsvpBy,
     intro: c.intro?.invite !== false,
+    registryUrl: c.registryUrl || '',
+    nameFont: c.nameFont || defaults.nameFont,
   };
 }
 

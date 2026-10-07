@@ -112,6 +112,9 @@ module.exports = {
 
   // WhatsApp / SMS invitation text. {name}, {link}, {rsvpBy} are filled in per guest.
   // This is for the private traditional wedding invitation.
+  // Script fonts the website editor offers for guests' names on the traditional card.
+  nameFonts: ['Pinyon Script', 'Cookie', 'MonteCarlo', 'Lavishly Yours'],
+
   // WhatsApp Business (Cloud API): the sending number and the approved template. The token is the WHATSAPP_TOKEN secret.
   whatsapp: { phoneNumberId: '1170328419507856', template: 'oluwabioye_invitation' },
   inviteMessage:

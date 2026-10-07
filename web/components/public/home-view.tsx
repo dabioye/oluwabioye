@@ -1,10 +1,11 @@
 'use client';
-import { BookOpen, Camera, Gift } from 'lucide-react';
+import { BookOpen, CalendarPlus, Camera, Gift, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Countdown } from '@/components/wedding/countdown';
-import { EventBlock } from '@/components/wedding/event-block';
+import { EventDetails } from '@/components/wedding/event-details';
 import { Intro } from '@/components/wedding/intro';
 import { Monogram } from '@/components/wedding/monogram';
+import { Wordmark } from '@/components/wedding/wordmark';
 import { Frame, Rule, Sprig } from '@/components/wedding/ornaments';
 import { Contacts, Dock, SiteFooter, SiteNav } from '@/components/wedding/site-chrome';
 import { cfg } from '@/lib/config';
@@ -42,17 +43,26 @@ function CoupleLockup({ onPhoto = false }: { onPhoto?: boolean }) {
 
 const dateLine = `${weekday()} · ${longDate(cfg.date)} · Lagos`;
 
+const introName = 'font-lavish text-[clamp(2rem,9vw,3.4rem)] leading-none whitespace-nowrap text-ivory [text-shadow:0_2px_10px_rgb(0_0_0/0.6)]';
+
 /** The wax-seal envelope for the home page (the couple can switch it off in the website editor). */
 export function HomeIntro() {
   const { content } = useSiteContent();
   return (
-    <Intro storageKey="home" enabled={content.intro.home}>
-      <p className="ui-caps m-0 text-[0.7rem] tracking-[0.25em] text-gold">The making of {c.surname}</p>
-      <p className="m-0 mb-1 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-[clamp(6px,2vw,16px)] [text-shadow:0_2px_10px_rgb(0_0_0/0.6)]">
-        <span className="font-script text-[clamp(2rem,8vw,3.1rem)] leading-none whitespace-nowrap text-ivory">{c.bride}</span>
-        <span className="font-script text-[clamp(1.8rem,7vw,2.6rem)] text-gold-bright">&amp;</span>
-        <span className="font-script text-[clamp(2rem,8vw,3.1rem)] leading-none whitespace-nowrap text-ivory">{c.groom}</span>
-      </p>
+    <Intro
+      storageKey="home"
+      enabled={content.intro.home}
+      beside={[
+        <span key="s" className={introName}>
+          {c.bride}
+        </span>,
+        <span key="d" className={introName}>
+          {c.groom}
+        </span>,
+      ]}
+    >
+      <p className="ui-caps m-0 text-[0.78rem] tracking-[0.3em] text-gold [text-shadow:0_2px_8px_rgb(0_0_0/0.7)]">The Making of</p>
+      <Wordmark embossed className="mb-1 w-[min(80vw,440px)] [filter:drop-shadow(0_3px_10px_rgb(0_0_0/0.55))]" />
     </Intro>
   );
 }
@@ -82,8 +92,9 @@ export function HomeView() {
         >
           <div className="grid justify-items-center gap-2.5 px-4 pb-[clamp(28px,6vh,56px)]">
             <CoupleLockup onPhoto />
-            <h1 className="mx-auto max-w-[18ch] font-display text-[clamp(1.25rem,5vw,2rem)] leading-tight font-medium tracking-[0.08em] text-ivory uppercase">
-              The Making of {c.surname}
+            <h1 className="m-0 grid justify-items-center gap-2 font-display text-[clamp(1rem,4vw,1.4rem)] leading-tight font-medium tracking-[0.2em] text-ivory uppercase">
+              The Making of
+              <Wordmark className="w-[min(78vw,420px)] text-ivory [filter:drop-shadow(0_2px_12px_rgb(0_0_0/0.45))]" />
             </h1>
             <div className="font-display text-[clamp(0.8rem,3.4vw,1.05rem)] tracking-[0.16em] text-ivory">{dateLine}</div>
             {content.hero.note && <p className="m-0 max-w-[30em] text-xl text-ivory italic">{content.hero.note}</p>}
@@ -100,9 +111,9 @@ export function HomeView() {
             <CoupleLockup />
           </div>
           <Rule />
-          <h1 className="mx-auto max-w-[18ch] font-display text-[clamp(1.55rem,5.5vw,2.7rem)] leading-tight font-medium tracking-[0.08em] text-gold uppercase motion-safe:animate-rise [animation-delay:160ms]">
+          <h1 className="mx-0 grid justify-items-center font-display text-[clamp(1.2rem,4.6vw,2rem)] leading-tight font-medium tracking-[0.2em] text-gold uppercase motion-safe:animate-rise [animation-delay:160ms]">
             The Making of
-            <span className="mt-1 block font-script text-[clamp(2.3rem,8vw,4.6rem)] leading-[1.08] tracking-normal text-ivory normal-case">{c.surname}</span>
+            <Wordmark className="mt-3 w-[min(86vw,520px)] text-ivory" />
           </h1>
           <div className="mt-5 font-display text-[clamp(0.95rem,3vw,1.15rem)] tracking-[0.18em] text-ivory">{dateLine}</div>
           {content.hero.note && <p className="lede mt-4 italic">{content.hero.note}</p>}
@@ -113,10 +124,13 @@ export function HomeView() {
 
       <main className="mx-auto max-w-[760px]">
         <section id="invitation" className="pt-5 text-center">
-          <div className="eyebrow">You are invited</div>
-          <h2 className="display mt-2.5 text-[clamp(1.25rem,3.6vw,1.6rem)]">The Making of {c.surname}</h2>
-          <p className="m-0 mt-2 font-script text-[clamp(2rem,7vw,3rem)] leading-tight">
-            {c.bride} &amp; {c.groom}
+          <div className="eyebrow">You are invited to</div>
+          <h2 className="mt-3 mb-0 grid justify-items-center gap-2.5 font-display text-[clamp(0.95rem,3vw,1.15rem)] font-medium tracking-[0.22em] text-gold uppercase">
+            The Making of
+            <Wordmark className="w-[min(80vw,400px)] text-ivory" />
+          </h2>
+          <p className="m-0 mt-4 font-ui text-[clamp(1.25rem,4.4vw,1.7rem)] font-normal tracking-[0.14em] text-ivory uppercase">
+            {c.bride} <span className="text-gold">&amp;</span> {c.groom}
           </p>
           <div className="mt-6 flex justify-center">
             <Button asChild size="lg" className="ui-caps h-12 rounded-[2px] px-7 text-[0.78rem] tracking-[0.22em]">
@@ -127,15 +141,29 @@ export function HomeView() {
 
         <Frame id="day">
           <div className="eyebrow">Together with their families</div>
-          <p className="lede mt-2">
+          <p className="mx-auto mt-3 mb-0 max-w-[30em] font-display text-[clamp(1.25rem,4.2vw,1.65rem)] leading-snug font-medium tracking-[0.04em] text-ivory">
             {cfg.families.bride}
-            <br />
-            and {cfg.families.groom}
+            <span className="my-1 block font-body text-[0.8em] text-gold italic">and</span>
+            {cfg.families.groom}
           </p>
           <div className="eyebrow mt-3.5">invite you to the wedding ceremony</div>
-          <div className="mt-7">
-            <EventBlock ev={church} />
-          </div>
+          <EventDetails ev={church} date={cfg.date} className="mt-8 border-y border-hairline-soft py-7">
+            <Button asChild size="lg" className="ui-caps h-12 rounded-[2px] px-6 text-[0.74rem] tracking-[0.2em]">
+              <a href={church.mapUrl} target="_blank" rel="noopener">
+                <MapPin /> Directions
+              </a>
+            </Button>
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
+              className="ui-caps h-12 rounded-[2px] border-gold bg-transparent px-6 text-[0.74rem] tracking-[0.2em] text-gold hover:bg-gold/10 hover:text-gold"
+            >
+              <a href={`/calendar/${church.key}.ics`}>
+                <CalendarPlus /> Add to calendar
+              </a>
+            </Button>
+          </EventDetails>
           {content.publicNotes.length > 0 && (
             <ul className="mx-auto mt-5 grid max-w-[34em] list-none gap-3 p-0 text-left">
               {content.publicNotes.map((n) => (
@@ -158,9 +186,12 @@ export function HomeView() {
 
         <Frame id="story">
           <div className="eyebrow">Our story</div>
-          <h2 className="display mt-2.5 text-[clamp(1.25rem,3.6vw,1.6rem)]">The Making of {c.surname}</h2>
-          <p className="mx-0 mt-2.5 mb-3.5 font-script text-[clamp(2rem,7vw,3rem)] leading-tight">
-            {c.bride} &amp; {c.groom}
+          <h2 className="mt-3 mb-0 grid justify-items-center gap-2.5 font-display text-[clamp(0.95rem,3vw,1.15rem)] font-medium tracking-[0.22em] text-gold uppercase">
+            The Making of
+            <Wordmark className="w-[min(72vw,340px)] text-ivory" />
+          </h2>
+          <p className="mx-0 mt-4 mb-3.5 font-ui text-[clamp(1.1rem,3.8vw,1.4rem)] font-normal tracking-[0.14em] text-ivory uppercase">
+            {c.bride} <span className="text-gold">&amp;</span> {c.groom}
           </p>
           <p className="lede">A new chapter begins as Sarah and Damilare bring their families, promises and futures together under one name: Oluwabioye.</p>
           {content.story.length ? (

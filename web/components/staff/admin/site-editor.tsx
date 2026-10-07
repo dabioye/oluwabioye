@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError } from '@/lib/api';
 import type { StoryMoment } from '@/lib/config';
 import { shrink } from '@/lib/image';
+import { NAME_FONTS } from '@/lib/invitation';
 import type { SiteSettings, WhatsAppStatus } from '@/lib/types';
 import { StaffHeader, StaffPage } from '../staff-shell';
 
@@ -206,6 +207,30 @@ export function SiteEditor() {
                 onChange={(trad) => update((x) => ({ ...x, invitationArt: { ...x.invitationArt, trad } }))}
               />
             </div>
+            <fieldset className="grid gap-2">
+              <legend className="mb-2 text-[0.72rem] tracking-[0.12em] text-ivory-dim uppercase">Font for guests’ names</legend>
+              <div role="radiogroup" aria-label="Font for guests’ names" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {NAME_FONTS.map(({ family, scale }) => {
+                  const on = (s.nameFont || NAME_FONTS[0].family) === family;
+                  return (
+                    <button
+                      key={family}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => update((x) => ({ ...x, nameFont: family }))}
+                      className={`grid cursor-pointer justify-items-center gap-1 rounded-md border px-2 py-3 transition-colors ${on ? 'border-gold bg-gold/10' : 'border-hairline-soft bg-navy hover:border-gold/50'}`}
+                    >
+                      <span className="text-[#f3e6cc]" style={{ fontFamily: `"${family}", cursive`, fontSize: `${1.9 * scale}rem`, lineHeight: 1.1 }}>
+                        Tope Omidiji
+                      </span>
+                      <small className="text-[0.7rem] text-ivory-dim">{family}</small>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="m-0 text-[0.8rem] text-ivory-dim">Used on each guest’s card on their invitation page and in the card sent on WhatsApp.</p>
+            </fieldset>
           </Section>
 
           <Section title="Our story" description="Moments shown on the home page and the Our Story page, in this order.">

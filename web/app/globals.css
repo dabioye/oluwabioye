@@ -11,6 +11,9 @@
 @import '@fontsource/dm-sans/500.css';
 @import '@fontsource/dm-sans/600.css';
 @import '@fontsource/pinyon-script/400.css';
+@import '@fontsource/lavishly-yours/400.css';
+@import '@fontsource/cookie/400.css';
+@import '@fontsource/montecarlo/400.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -120,6 +123,7 @@
   --font-display: 'Bodoni Moda', 'Bodoni MT', Didot, Georgia, serif;
   --font-body: 'Cormorant Garamond', Garamond, Georgia, serif;
   --font-script: 'Pinyon Script', 'Snell Roundhand', cursive;
+  --font-lavish: 'Lavishly Yours', 'Pinyon Script', cursive;
   --font-ui: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-sans: var(--font-ui);
 

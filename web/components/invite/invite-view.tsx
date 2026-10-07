@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { CreditCard, Mail, MapPin, ScrollText } from 'lucide-react';
+import { CalendarPlus, CreditCard, Mail, MapPin, ScrollText } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -10,17 +10,19 @@ import { Intro } from '@/components/wedding/intro';
 import { InvitationArt } from '@/components/wedding/invitation-art';
 import { Monogram } from '@/components/wedding/monogram';
 import { Frame, Rule } from '@/components/wedding/ornaments';
-import { Contacts, Dock, SiteFooter } from '@/components/wedding/site-chrome';
+import { Contacts, Dock, SiteFooter, SiteNav } from '@/components/wedding/site-chrome';
+import { Wordmark } from '@/components/wedding/wordmark';
 import { api, ApiError } from '@/lib/api';
 import { codeFromPath } from '@/lib/code';
 import { cfg } from '@/lib/config';
-import { longDate } from '@/lib/format';
+import { longDate, weekday } from '@/lib/format';
 import { forget, recall, remember, useRemembered } from '@/lib/remember';
 import type { InviteData, InviteGuest } from '@/lib/types';
 import { RsvpForm } from './rsvp-form';
 
 const c = cfg.couple;
 const trad = cfg.events.trad;
+const church = cfg.events.church;
 
 type State = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; data: InviteData };
 
@@ -62,13 +64,24 @@ export function InviteView() {
   return (
     <>
       <Intro storageKey="invite" enabled={state.kind !== 'error' && data?.invite.intro !== false}>
-        <p className="ui-caps m-0 text-[0.7rem] tracking-[0.25em] text-gold">The making of {c.surname}</p>
-        <span className="eyebrow !text-ivory">An invitation for</span>
+        <p className="ui-caps m-0 text-[0.78rem] tracking-[0.3em] text-gold [text-shadow:0_2px_8px_rgb(0_0_0/0.7)]">The Making of</p>
+        <Wordmark embossed className="w-[min(80vw,440px)] [filter:drop-shadow(0_3px_10px_rgb(0_0_0/0.55))]" />
+        <span className="eyebrow mt-2 !text-ivory">An invitation for</span>
         <span className="min-h-[1.3em] font-script text-[clamp(2.2rem,9vw,3.2rem)] leading-tight text-gold-bright [text-shadow:0_2px_10px_rgb(0_0_0/0.6)]">
           {guest ? guest.name : 'you'}
         </span>
       </Intro>
 
+      {data && guest && (
+        <SiteNav
+          links={[
+            { href: '#invitation', label: 'Invitation' },
+            { href: '#respond', label: 'RSVP' },
+            { href: `${data.publicUrl}/our-story`, label: 'Our Story', external: true },
+            { href: data.invite.registryUrl || `${data.publicUrl}/invitation#gifts`, label: 'Gift Registry', external: true },
+          ]}
+        />
+      )}
       <main className="mx-auto max-w-[760px]">
         {state.kind === 'loading' && <LoadingInvite />}
         {state.kind === 'error' && <InviteError message={state.message} />}
@@ -82,6 +95,7 @@ export function InviteView() {
                 src={data.invite.art}
                 name={guest.name}
                 slot={data.invite.nameSlot}
+                font={data.invite.nameFont}
                 code={guest.code}
                 codeSlot={data.invite.codeSlot}
                 alt={`Invitation for ${guest.name}, access code ${guest.code}: The Making of ${c.surname}, traditional wedding, strictly by invitation, ${longDate(cfg.date)}, ${trad.time}, ${trad.venue}. No children allowed.`}
@@ -96,9 +110,29 @@ export function InviteView() {
               </Button>
             </EventDetails>
 
-            <Frame id="respond">
-              <h2 className="display mb-3 text-[clamp(1.25rem,3.6vw,1.6rem)]">
-                {guest.rsvp === 'pending' ? `Will you join us, ${guest.name.split(/\s+/)[0]}?` : 'Your RSVP'}
+            {guest.events.includes('church') && (
+              <EventDetails ev={church} date={cfg.date} className="mt-10 border-t border-hairline-soft pt-9">
+                <Button asChild size="lg" className="ui-caps h-12 rounded-[2px] px-6 text-[0.74rem] tracking-[0.2em]">
+                  <a href={church.mapUrl} target="_blank" rel="noopener">
+                    <MapPin /> Directions
+                  </a>
+                </Button>
+                <Button
+                  asChild
+                  size="lg"
+                  variant="outline"
+                  className="ui-caps h-12 rounded-[2px] border-gold bg-transparent px-6 text-[0.74rem] tracking-[0.2em] text-gold hover:bg-gold/10 hover:text-gold"
+                >
+                  <a href={`/calendar/${church.key}.ics`}>
+                    <CalendarPlus /> Add to calendar
+                  </a>
+                </Button>
+              </EventDetails>
+            )}
+
+            <Frame id="respond" className="scroll-mt-16">
+              <h2 className="display mb-3 text-[clamp(1.25rem,3.6vw,1.6rem)] tracking-[0.18em] uppercase">
+                {guest.rsvp === 'pending' ? 'Send RSVP' : 'Your RSVP'}
               </h2>
               <RsvpBlock
                 guest={guest}
@@ -147,7 +181,17 @@ function RsvpBlock({ guest, qrSvg, rsvpBy, onSaved }: { guest: InviteGuest; qrSv
   if (guest.rsvp === 'pending')
     return (
       <>
-        <div className="eyebrow">Kindly respond by {longDate(rsvpBy)}</div>
+        <p className="lede mx-auto mt-1 max-w-[30em]">
+          Dear {guest.name.split(/\s+/)[0]}, will you join us for the <b className="font-medium text-foreground">{trad.name}</b> on {weekday(cfg.date)},{' '}
+          {longDate(cfg.date)} at {trad.time}, {trad.venue}
+          {guest.events.includes('church') && (
+            <>
+              , and the <b className="font-medium text-foreground">{church.name}</b> at {church.time}, {church.venue}
+            </>
+          )}
+          ?
+        </p>
+        <div className="eyebrow mt-4">Kindly respond by {longDate(rsvpBy)}</div>
         <RsvpForm guest={guest} onSubmit={save} />
       </>
     );

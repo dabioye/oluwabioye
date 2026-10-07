@@ -29,6 +29,10 @@ export type InviteData = {
     notes: string[];
     rsvpBy: string;
     intro: boolean;
+    /** The couple's gift registry (external), if set. */
+    registryUrl: string;
+    /** Script font for the guest's name on the card. */
+    nameFont: string;
   };
   /** The public wedding website, for the link back to it. */
   publicUrl: string;
@@ -121,6 +125,8 @@ export type SiteSettings = {
   intro: { home: boolean; invite: boolean };
   /** Send the WhatsApp invitation as soon as a guest is added or imported. */
   waAutoSend?: boolean;
+  /** Script font for guests' names on the traditional card. */
+  nameFont?: string;
   /** Read-only: the invite site, where the traditional card is served from. */
   inviteUrl?: string;
 };

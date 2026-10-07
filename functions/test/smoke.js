@@ -256,15 +256,19 @@ const store = require('../src/store');
   await req('/api/whatsapp/webhook', signed(incoming('2348031112223', 'wamid.in3', 'Late reply', 'Good', Math.floor(Date.now() / 1000) - 2 * 86400)));
   r = await req('/api/admin/inbox', { headers: { cookie: admin } });
   const inbox = await r.json();
-  assert.deepEqual(inbox.threads.map((t) => [t.name, t.unread]), [['Stranger', 1], ['Ada Lovelace', 1], ['Good One', 1]]);
-  assert.equal(inbox.threads[0].thread, 'p:447700900123');
+  const byName = (list, name) => list.threads.find((t) => t.name === name);
+  assert.deepEqual(inbox.threads.filter((t) => t.name !== 'Tope Omidiji').map((t) => [t.name, t.unread]), [['Stranger', 1], ['Ada Lovelace', 1], ['Good One', 1]]);
+  assert.equal(byName(inbox, 'Stranger').thread, 'p:447700900123');
+  // Tope's RSVP note from the invitation page came to the inbox too, but doesn't open a WhatsApp window
+  const tope = byName(inbox, 'Tope Omidiji');
+  assert.deepEqual([tope.thread, tope.last.text, tope.windowUntil], [g.id, 'RSVP: Joyfully accepts\n\nCan’t wait', null]);
   r = await req('/api/admin/guests', { headers: { cookie: admin } });
   assert((await r.json()).activity.some((a) => a.type === 'wareply' && a.name === 'Ada Lovelace' && a.extra.startsWith('Thank you!')));
   r = await req(`/api/admin/inbox/${ada.id}`, { headers: { cookie: admin } });
   const thread = await r.json();
   assert.deepEqual(thread.messages.map((m) => [m.dir, m.text]), [['in', 'Thank you!\n\nWe’ll be there']]);
   assert(new Date(thread.windowUntil) > new Date());
-  assert.equal((await (await req('/api/admin/inbox', { headers: { cookie: admin } })).json()).threads[1].unread, 0, 'opening a thread marks it read');
+  assert.equal(byName(await (await req('/api/admin/inbox', { headers: { cookie: admin } })).json(), 'Ada Lovelace').unread, 0, 'opening a thread marks it read');
   r = await req(`/api/admin/inbox/${ada.id}/reply`, json('POST', { text: 'See you on the 17th!' }, admin));
   const out = await r.json();
   assert.equal(r.status, 200, JSON.stringify(out));
@@ -273,11 +277,19 @@ const store = require('../src/store');
   r = await req(`/api/admin/inbox/${ada.id}`, { headers: { cookie: admin } });
   assert.deepEqual((await r.json()).messages.map((m) => [m.dir, m.text, m.status || '']), [['in', 'Thank you!\n\nWe’ll be there', ''], ['out', 'See you on the 17th!', 'delivered']]);
   assert.equal((await req('/api/admin/inbox/p:447700900123/reply', json('POST', { text: 'Hi' }, admin))).status, 200, 'numbers not on the list can be answered too');
-  const goodId = inbox.threads[2].thread;
+  const goodId = byName(inbox, 'Good One').thread;
   r = await req(`/api/admin/inbox/${goodId}/reply`, json('POST', { text: 'Sorry for the delay' }, admin));
   assert.equal(r.status, 400);
   assert.match((await r.json()).error, /24-hour window has closed/);
   assert.equal((await req(`/api/admin/inbox/${goodId}`, { headers: { cookie: gate } })).status, 401);
+  // A decline from the invitation page brings its reason to the inbox and the couple's phone
+  r = await req(`/api/invite/${ada.code}/rsvp`, json('POST', { response: 'no', note: ' Travelling that week, so sorry ' }));
+  assert.equal((await r.json()).guest.rsvp, 'no');
+  assert.deepEqual(sendsTo('2348011112222').at(-1).template.components[0].parameters.map((p) => p.text), ['Ada Lovelace', 'RSVP: Regretfully declines Travelling that week, so sorry']);
+  r = await req(`/api/admin/inbox/${ada.id}`, { headers: { cookie: admin } });
+  const adaThread = await r.json();
+  assert.equal(adaThread.messages.at(-1).text, 'RSVP: Regretfully declines\n\nTravelling that week, so sorry');
+  assert(new Date(adaThread.windowUntil) > new Date(), 'her earlier WhatsApp message still keeps the window open');
 
   // A template that starts with an image gets each guest's card from the desk; nothing can go out without it
   meta.template = { ...meta.template, components: [{ type: 'HEADER', format: 'IMAGE' }, ...meta.template.components] };

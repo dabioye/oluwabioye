@@ -56,20 +56,23 @@ export function Desk() {
 
   // The traditional card the guests' personalised images are drawn on (an upload, or the built-in one on the invite site).
   const [cardSrc, setCardSrc] = useState('');
+  const [nameFont, setNameFont] = useState<string | undefined>();
   useEffect(() => {
     api<SiteSettings>('/api/admin/site').then(
       (s) => {
         const src = s.invitationArt?.trad || cfg.invitationArt.trad;
         const full = src.startsWith('/img/') && s.inviteUrl ? `${s.inviteUrl}${src}` : src;
         setCardSrc(full);
-        preloadCard(full);
+        setNameFont(s.nameFont);
+        preloadCard(full, s.nameFont);
       },
       () => {},
     );
   }, []);
   const cardFor = useCallback(
-    (g: Guest) => renderCard({ src: cardSrc, name: g.name, code: g.code, nameSlot: cfg.invitationArt.nameSlot, codeSlot: cfg.invitationArt.codeSlot }),
-    [cardSrc],
+    (g: Guest) =>
+      renderCard({ src: cardSrc, name: g.name, code: g.code, nameSlot: cfg.invitationArt.nameSlot, codeSlot: cfg.invitationArt.codeSlot, font: nameFont }),
+    [cardSrc, nameFont],
   );
   const [cardStep, setCardStep] = useState<Guest | null>(null);
 

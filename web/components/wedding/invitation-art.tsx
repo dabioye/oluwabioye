@@ -3,18 +3,18 @@ import { nameLayout, type CodeSlot, type NameSlot } from '@/lib/invitation';
 import { cn } from '@/lib/utils';
 import { useLightbox } from './lightbox';
 
-type CardProps = { src: string; alt: string; name?: string; slot?: NameSlot; code?: string; codeSlot?: CodeSlot; className?: string };
+type CardProps = { src: string; alt: string; name?: string; slot?: NameSlot; font?: string; code?: string; codeSlot?: CodeSlot; className?: string };
 
-function Card({ src, alt, name, slot, code, codeSlot, className }: CardProps) {
-  const n = name && slot ? nameLayout(name, slot) : null;
+function Card({ src, alt, name, slot, font, code, codeSlot, className }: CardProps) {
+  const n = name && slot ? nameLayout(name, slot, font) : null;
   return (
     <div className={cn('relative [container-type:inline-size]', className)}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt={alt} width={600} height={1010} decoding="async" className="block h-auto w-full" />
       {n && (
         <span
-          className="pointer-events-none absolute inset-x-[6%] -translate-y-1/2 text-center font-script leading-[1.05] whitespace-nowrap text-[#f3e6cc] [text-shadow:0_1px_3px_rgb(0_0_0/0.5)]"
-          style={{ top: `${n.top}%`, fontSize: `${n.size.toFixed(2)}cqw`, lineHeight: n.lineHeight }}
+          className="pointer-events-none absolute inset-x-[6%] -translate-y-1/2 text-center leading-[1.05] whitespace-nowrap text-[#f3e6cc] [text-shadow:0_1px_3px_rgb(0_0_0/0.5)]"
+          style={{ top: `${n.top}%`, fontSize: `${n.size.toFixed(2)}cqw`, lineHeight: n.lineHeight, fontFamily: `"${n.family}", cursive` }}
         >
           {n.lines.map((l, i) => (
             <span key={i} className="block">
