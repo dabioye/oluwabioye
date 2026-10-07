@@ -142,7 +142,10 @@ function Conversation({ thread, onBack, onChanged }: { thread: string; onBack: (
     const i = setInterval(() => !document.hidden && load(), 10_000);
     return () => clearInterval(i);
   }, [load]);
-  useEffect(() => end.current?.scrollIntoView({ block: 'end' }), [count]);
+  // Braces matter: newer browsers return a Promise from scrollIntoView, which React would take for a cleanup.
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: 'end' });
+  }, [count]);
 
   async function send(e?: { preventDefault: () => void }) {
     e?.preventDefault();
