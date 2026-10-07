@@ -65,7 +65,7 @@ module.exports = {
   churchRsvp: { open: false, maxParty: 6 },
 
   // Gift registry on withjoy.com. Paste your registry link here.
-  registryUrl: '',
+  registryUrl: 'https://wishgum.com/w/sarahdamilare_',
 
   // Shown only on private traditional-wedding invitations (/i/CODE).
   notes: [

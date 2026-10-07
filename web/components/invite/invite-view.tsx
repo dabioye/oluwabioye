@@ -15,7 +15,7 @@ import { Wordmark } from '@/components/wedding/wordmark';
 import { api, ApiError } from '@/lib/api';
 import { codeFromPath } from '@/lib/code';
 import { cfg } from '@/lib/config';
-import { longDate, weekday } from '@/lib/format';
+import { longDate } from '@/lib/format';
 import { forget, recall, remember, useRemembered } from '@/lib/remember';
 import type { InviteData, InviteGuest } from '@/lib/types';
 import { RsvpForm } from './rsvp-form';
@@ -75,7 +75,6 @@ export function InviteView() {
       {data && guest && (
         <SiteNav
           links={[
-            { href: '#invitation', label: 'Invitation' },
             { href: '#respond', label: 'RSVP' },
             { href: `${data.publicUrl}/our-story`, label: 'Our Story', external: true },
             { href: data.invite.registryUrl || `${data.publicUrl}/invitation#gifts`, label: 'Gift Registry', external: true },
@@ -181,17 +180,8 @@ function RsvpBlock({ guest, qrSvg, rsvpBy, onSaved }: { guest: InviteGuest; qrSv
   if (guest.rsvp === 'pending')
     return (
       <>
-        <p className="lede mx-auto mt-1 max-w-[30em]">
-          Dear {guest.name.split(/\s+/)[0]}, will you join us for the <b className="font-medium text-foreground">{trad.name}</b> on {weekday(cfg.date)},{' '}
-          {longDate(cfg.date)} at {trad.time}, {trad.venue}
-          {guest.events.includes('church') && (
-            <>
-              , and the <b className="font-medium text-foreground">{church.name}</b> at {church.time}, {church.venue}
-            </>
-          )}
-          ?
-        </p>
-        <div className="eyebrow mt-4">Kindly respond by {longDate(rsvpBy)}</div>
+        <p className="lede mx-auto mt-1 max-w-[30em]">Dear {guest.name.split(/\s+/)[0]}, will you join us?</p>
+        <div className="eyebrow mt-3">Kindly respond by {longDate(rsvpBy)}</div>
         <RsvpForm guest={guest} onSubmit={save} />
       </>
     );

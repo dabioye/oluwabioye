@@ -8,7 +8,7 @@ const defaults = JSON.parse(JSON.stringify({
   giftsMessage: cfg.gifts.message, publicNotes: cfg.publicNotes, rsvpBy: cfg.rsvpBy,
   invitationArt: { church: cfg.invitationArt.church, trad: cfg.invitationArt.trad }, intro: cfg.intro,
   waAutoSend: false,
-  nameFont: 'Pinyon Script',
+  nameFont: 'Cookie',
 }));
 
 const str = (v, max = 2000) => String(v ?? '').trim().slice(0, max);
@@ -51,7 +51,7 @@ function publicView(c) {
     hero: { photo: c.hero?.photo || '', note: c.hero?.note || '' },
     story: c.story || [],
     gallery: c.gallery || [],
-    registryUrl: c.registryUrl || '',
+    registryUrl: c.registryUrl || defaults.registryUrl,
     giftsMessage: c.giftsMessage || '',
     publicNotes: c.publicNotes || [],
     rsvpBy: c.rsvpBy,
@@ -69,7 +69,7 @@ function inviteView(c) {
     notes: cfg.notes,
     rsvpBy: c.rsvpBy,
     intro: c.intro?.invite !== false,
-    registryUrl: c.registryUrl || '',
+    registryUrl: c.registryUrl || defaults.registryUrl,
     nameFont: c.nameFont || defaults.nameFont,
   };
 }

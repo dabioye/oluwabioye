@@ -7,8 +7,8 @@ export type CodeSlot = { top: number; left: number; size: number };
  * tall as Pinyon Script's without the name running wider (measured on "Tope Omidiji").
  */
 export const NAME_FONTS = [
-  { family: 'Pinyon Script', scale: 1 },
   { family: 'Cookie', scale: 1.15 },
+  { family: 'Pinyon Script', scale: 1 },
   { family: 'MonteCarlo', scale: 1.08 },
   { family: 'Lavishly Yours', scale: 1.05 },
 ] as const;
