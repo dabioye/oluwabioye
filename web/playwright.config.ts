@@ -42,6 +42,7 @@ export default defineConfig({
         WHATSAPP_API_BASE: META,
         WHATSAPP_TOKEN: 'e2e-token',
         WHATSAPP_PHONE_ID: 'PHONE1',
+        WHATSAPP_WABA_ID: 'WABA1',
         WHATSAPP_APP_SECRET: 'e2e-app-secret',
         WHATSAPP_ALERT_TO: '08011112222',
       },
