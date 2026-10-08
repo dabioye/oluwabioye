@@ -22,7 +22,7 @@ export function InvitationView() {
         links={[
           { href: '/', label: 'Home' },
           { href: '/our-story', label: 'Our Story' },
-          { href: '/#gallery', label: 'Gallery' },
+          { href: '/gallery', label: 'Gallery' },
           { href: content.registryUrl || '#gifts', label: 'Gift Registry', external: !!content.registryUrl },
         ]}
       />

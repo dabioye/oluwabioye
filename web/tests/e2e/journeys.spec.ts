@@ -24,8 +24,10 @@ test('public site: church wedding only, no RSVP, no code box', async ({ page }) 
   const registry = page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Gift Registry' });
   await expect(registry).toHaveAttribute('href', 'https://wishgum.com/w/sarahdamilare_');
   await expect(registry).toHaveAttribute('target', '_blank');
-  await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Gallery' })).toHaveAttribute('href', '#gallery');
+  await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Gallery' })).toHaveAttribute('href', '/gallery');
   await expect(page.locator('#gallery')).toContainText('Photos are coming soon');
+  await expect(page.getByText('Oluwafunmilayo Emem')).toBeVisible();
+  await expect(page.getByRole('link', { name: '+234 903 002 2185' })).toHaveAttribute('href', 'tel:+2349030022185');
   const body = await page.locator('body').innerText();
   expect(body).toContain('Garden of Peace');
   expect(body).not.toMatch(/SCFN|Traditional Wedding/);
@@ -40,6 +42,9 @@ test('public site: church wedding only, no RSVP, no code box', async ({ page }) 
   await expect(page.getByRole('link', { name: 'Directions' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Add to calendar' })).toHaveAttribute('href', '/calendar/church.ics');
   await expect(page.getByRole('heading', { name: 'Celebrate our new chapter' })).toBeVisible();
+  // The gallery has a page of its own.
+  await page.goto(`${PUBLIC}/gallery`);
+  await expect(page.getByRole('heading', { name: 'Moments so far' })).toBeVisible();
   await page.goto(`${PUBLIC}/our-story`);
   await expect(page.getByRole('heading', { name: /The Making/ })).toBeVisible();
 });
