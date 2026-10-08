@@ -222,7 +222,8 @@ test('with WhatsApp Business, the desk sends each guest their card and message f
   await expect(dialog.getByText(/^Dear Kemi Adeyemi,/)).toBeVisible();
   await expect(dialog.getByText('View invitation')).toBeVisible();
   await dialog.getByRole('button', { name: 'Send now' }).click();
-  await expect(dialog.getByText(/Done\. 1 sent of 1/)).toBeVisible();
+  // Drawing the card and uploading it can take a while on a busy CI machine.
+  await expect(dialog.getByText(/Done\. 1 sent of 1/)).toBeVisible({ timeout: 20_000 });
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(row.getByText('WhatsApp queued')).toBeVisible();
 
@@ -245,7 +246,11 @@ test('with WhatsApp Business, the desk sends each guest their card and message f
   await expect(page.getByRole('button', { name: 'Send all pending via WhatsApp' })).toHaveCount(0);
   meta = await (await request.get(`${META}/__sent`)).json();
   expect(meta.sent.map((m: { to: string }) => m.to)).toContain('2348088888888');
-  expect(meta.sent.filter((m: { to: string }) => m.to === '2348077777777')).toHaveLength(1);
+  // Kemi got exactly one invitation (counted by her code, so a retried attempt's earlier sends don't count).
+  const forKemi = meta.sent.filter((m: { template: { components: { type: string; parameters: { text?: string }[] }[] } }) =>
+    m.template.components.some((c) => c.type === 'button' && c.parameters[0].text === kemi.code),
+  );
+  expect(forKemi).toHaveLength(1);
 });
 
 test('guests’ WhatsApp replies arrive in the inbox, alert the couple, and can be answered', async ({ page, request }) => {
