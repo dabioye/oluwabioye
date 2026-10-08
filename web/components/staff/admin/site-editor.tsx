@@ -432,13 +432,15 @@ export function SiteEditor() {
               <legend className="mb-2 text-[0.72rem] tracking-[0.12em] text-ivory-dim uppercase">WhatsApp invitations</legend>
               <label className="flex items-center justify-between gap-3 text-ivory">
                 Send the WhatsApp invitation automatically when a guest is added or imported
-                <Switch checked={!!s.waAutoSend} disabled={!wa?.configured} onCheckedChange={(waAutoSend) => update((x) => ({ ...x, waAutoSend }))} />
+                <Switch checked={!!s.waAutoSend} disabled={!wa?.ready || !!wa.template?.needsImage} onCheckedChange={(waAutoSend) => update((x) => ({ ...x, waAutoSend }))} />
               </label>
               <p className="m-0 text-[0.8rem] text-ivory-dim">
                 {!wa
                   ? 'Checking WhatsApp…'
                   : !wa.configured
                     ? 'WhatsApp API is not connected yet. Set the WhatsApp secrets, then redeploy.'
+                    : !wa.ready
+                      ? 'WhatsApp cannot send yet. Resolve the connection or approved-template issue shown on the invitation desk, then try again.'
                     : wa.template?.needsImage
                       ? 'Your template starts with an image, so each guest’s card goes with it. That only works from the invitation desk, so guests aren’t sent automatically.'
                       : 'WhatsApp API is connected. Turn this on only after a test send to yourself looks right.'}

@@ -307,7 +307,9 @@ api.post('/guests/:id/whatsapp', express.raw({ type: 'image/jpeg', limit: '4mb' 
 // Send to every WhatsApp guest who hasn't had an API invite yet (150 per call; the page repeats until done).
 // Only for templates that don't need each guest's card: the desk sends those one by one with the card.
 api.post('/whatsapp/send-pending', wrap(async (req, res) => {
-  if (!whatsapp.configured()) return res.status(400).json({ error: 'WhatsApp API is not set up yet.' });
+  const wa = await whatsapp.status();
+  if (!wa.configured) return res.status(400).json({ error: 'WhatsApp API is not set up yet.' });
+  if (!wa.ready) return res.status(409).json({ error: (wa.problems || []).join(' ') || 'WhatsApp is not ready to send invitations.' });
   if (await whatsapp.needsCard()) return res.status(409).json({ error: 'This template needs each guest’s card. Send from the invitation desk.' });
   const pending = (await store.all()).filter(whatsapp.eligible).filter((g) => g.waStatus !== 'failed' || req.body.retryFailed);
   const batch = pending.slice(0, 150);

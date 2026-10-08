@@ -84,7 +84,7 @@ export function Desk() {
   }, []);
   /** Can this guest's invitation go through WhatsApp Business (with their card, if the template needs one)? */
   const viaApi = (g: Guest) =>
-    !!wa?.configured && g.channel === 'whatsapp' && !!g.phone && g.rsvp !== 'no' && (!wa.template?.needsImage || (!!cardSrc && getsCard(g)));
+    !!wa?.ready && g.channel === 'whatsapp' && !!g.phone && g.rsvp !== 'no' && (!wa.template?.needsImage || (!!cardSrc && getsCard(g)));
 
   async function saveCard(g: Guest) {
     try {
