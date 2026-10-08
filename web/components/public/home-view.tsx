@@ -77,7 +77,7 @@ export function HomeView() {
         links={[
           { href: '/invitation', label: 'Invitation' },
           { href: '/our-story', label: 'Our Story' },
-          { href: '#gallery', label: 'Gallery' },
+          { href: '/gallery', label: 'Gallery' },
           { href: content.registryUrl || '#gifts', label: 'Gift Registry', external: !!content.registryUrl },
         ]}
       />
@@ -193,7 +193,18 @@ export function HomeView() {
           <div className="eyebrow">Gallery</div>
           <h2 className="display mt-2.5 text-[clamp(1.25rem,3.6vw,1.6rem)]">Moments so far</h2>
           {content.gallery.length ? (
-            <Gallery photos={content.gallery} />
+            <>
+              <Gallery photos={content.gallery.slice(0, 6)} />
+              <div className="mt-6 flex justify-center">
+                <Button
+                  asChild
+                  variant="outline"
+                  className="ui-caps h-11 rounded-[2px] border-gold bg-transparent px-6 text-[0.74rem] tracking-[0.2em] text-gold hover:bg-gold/10 hover:text-gold"
+                >
+                  <a href="/gallery">{content.gallery.length > 6 ? `See all ${content.gallery.length} photos` : 'View the gallery'}</a>
+                </Button>
+              </div>
+            </>
           ) : (
             <p className="lede mt-4 italic">Photos are coming soon. Check back as the celebration draws near.</p>
           )}
@@ -210,7 +221,7 @@ export function HomeView() {
       <Dock
         items={[
           { href: '/our-story', icon: BookOpen, label: 'Our story' },
-          { href: '#gallery', icon: Camera, label: 'Gallery' },
+          { href: '/gallery', icon: Camera, label: 'Gallery' },
           content.registryUrl
             ? { href: content.registryUrl, icon: Gift, label: 'Registry', external: true }
             : { href: '#gifts', icon: Gift, label: 'Registry' },

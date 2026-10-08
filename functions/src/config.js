@@ -5,7 +5,7 @@ module.exports = {
   couple: {
     bride: 'Sarah',
     groom: 'Damilare',
-    brideFull: 'Oluwafunmilayo Sarah',
+    brideFull: 'Oluwafunmilayo Emem',
     groomFull: 'Oluwadamilare David',
     monogram: 'SD',
     hashtag: 'The Making of Oluwabioye',
@@ -52,7 +52,7 @@ module.exports = {
 
   contacts: [
     { name: 'Busayo', phone: '+234 808 806 8669' },
-    { name: 'Hope', phone: '+234 817 541 6843' },
+    { name: 'Hope', phone: '+234 903 002 2185' },
   ],
 
   // Shown on the public homepage (church wedding). Keep traditional-wedding details out of here.
