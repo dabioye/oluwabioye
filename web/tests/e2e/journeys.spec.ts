@@ -42,6 +42,11 @@ test('public site: church wedding only, no RSVP, no code box', async ({ page }) 
   await expect(page.getByRole('link', { name: 'Directions' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Add to calendar' })).toHaveAttribute('href', '/calendar/church.ics');
   await expect(page.getByRole('heading', { name: 'Celebrate our new chapter' })).toBeVisible();
+  // A public privacy policy (Meta needs one to publish the WhatsApp app), linked from every footer.
+  await page.goto(`${PUBLIC}/privacy`);
+  await expect(page.getByRole('heading', { name: 'Privacy policy' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your choices, and deleting your data' })).toBeVisible();
+  await expect(page.getByRole('contentinfo').getByRole('link', { name: 'Privacy policy' })).toHaveAttribute('href', '/privacy');
   // The gallery has a page of its own.
   await page.goto(`${PUBLIC}/gallery`);
   await expect(page.getByRole('heading', { name: 'Moments so far' })).toBeVisible();
