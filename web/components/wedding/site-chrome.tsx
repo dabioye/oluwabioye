@@ -63,6 +63,9 @@ export function SiteFooter({ children }: { children?: React.ReactNode }) {
           {cfg.couple.bride} &amp; {cfg.couple.groom} · {longDate(cfg.date)}
         </>
       )}
+      <a href="/privacy" className="mt-2 block text-[0.72rem] text-ivory-dim/80 no-underline hover:text-gold">
+        Privacy policy
+      </a>
     </footer>
   );
 }
