@@ -434,7 +434,7 @@ export function SiteEditor() {
                 Send the WhatsApp invitation automatically when a guest is added or imported
                 <Switch
                   checked={!!s.waAutoSend}
-                  disabled={!s.waAutoSend && (!wa?.ready || !!wa.template?.needsImage)}
+                  disabled={!s.waAutoSend && !wa?.ready}
                   onCheckedChange={(waAutoSend) => update((x) => ({ ...x, waAutoSend }))}
                 />
               </label>
@@ -446,7 +446,7 @@ export function SiteEditor() {
                     : !wa.ready
                       ? 'WhatsApp cannot send yet. Resolve the connection or approved-template issue shown on the invitation desk, then try again.'
                       : wa.template?.needsImage
-                        ? 'Your template starts with an image, so each guest’s card goes with it. That only works from the invitation desk, so guests aren’t sent automatically.'
+                        ? 'Each guest’s personalised card goes with their message, including when they’re sent automatically. Only guests invited to the traditional wedding are sent one. Turn this on only after a test send to yourself looks right.'
                         : 'WhatsApp API is connected. Turn this on only after a test send to yourself looks right.'}
               </p>
             </fieldset>
