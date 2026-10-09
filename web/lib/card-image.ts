@@ -1,10 +1,9 @@
 'use client';
-import { nameFont, nameLayout, type CodeSlot, type NameSlot } from './invitation';
+import { CARD_INK, CODE_SPACING, nameFont, nameLayout, type CodeSlot, type NameSlot } from './invitation';
 
 // Draws a guest's personalised traditional invitation (card + name + access code) as a JPEG,
 // placed exactly like the card on their invitation page, so it can be sent with the WhatsApp message.
 
-const INK = '#f3e6cc';
 const images = new Map<string, Promise<HTMLImageElement>>();
 
 function loadImage(src: string) {
@@ -44,7 +43,7 @@ export async function renderCard({ src, name, code, nameSlot, codeSlot, font }: 
   c.height = H;
   const x = c.getContext('2d')!;
   x.drawImage(img, 0, 0, W, H);
-  x.fillStyle = INK;
+  x.fillStyle = CARD_INK;
   x.textAlign = 'center';
   x.textBaseline = 'middle';
 
@@ -63,7 +62,7 @@ export async function renderCard({ src, name, code, nameSlot, codeSlot, font }: 
   const codePx = (codeSlot.size / 100) * W;
   x.font = `500 ${codePx}px "Bodoni Moda", serif`;
   x.textAlign = 'left';
-  const gap = codePx * 0.18;
+  const gap = codePx * CODE_SPACING;
   const widths = [...code].map((ch) => x.measureText(ch).width);
   const total = widths.reduce((a, b) => a + b, 0) + gap * code.length;
   let cx = (codeSlot.left / 100) * W - total / 2;

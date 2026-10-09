@@ -178,7 +178,7 @@ Meta app → WhatsApp → Configuration → Webhook:
 ### 4. Turn it on
 
 1. Test with **Send · WhatsApp** on a guest entry with your own number.
-2. Optionally tick **Edit website → WhatsApp invitations → Send automatically**. Guests are then sent their invitation as soon as they're added or imported. This only works with a template without an image: the card is drawn in the browser, so an image template is always sent from the desk.
+2. Optionally tick **Edit website → WhatsApp invitations → Send automatically**. Guests are then sent their invitation as soon as they're added or imported. With an image template, the server draws each guest's personalised card (`functions/src/card.js`, laid out exactly like the desk's card), so automatic sends and **Send all pending** include it too. Only guests invited to the traditional wedding are sent the card template.
 3. Use **Send all pending via WhatsApp** for everyone else. Guests marked "Printed card" or who declined are skipped.
 
 A new WhatsApp Business account can message about 250 people a day, which covers the whole guest list.

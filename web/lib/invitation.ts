@@ -1,33 +1,16 @@
-// Where and how big the guest's name sits on the traditional invitation card.
+// Where and how big the guest's name sits on the traditional invitation card. The layout itself is shared
+// with the API (which draws cards for automatic WhatsApp sends), so the two always match.
+import layout from '../../functions/src/card-layout.js';
+
 export type NameSlot = { top: number; maxSize: number };
 export type CodeSlot = { top: number; left: number; size: number };
+export type NameFont = { family: string; scale: number };
+export type NameLayout = { lines: string[]; top: number; size: number; lineHeight: number; family: string };
 
-/**
- * Script fonts for the guest's name. `scale` evens out their sizes: each is set so its capitals stand as
- * tall as Pinyon Script's without the name running wider (measured on "Tope Omidiji").
- */
-export const NAME_FONTS = [
-  { family: 'Cookie', scale: 1.15 },
-  { family: 'Pinyon Script', scale: 1 },
-  { family: 'MonteCarlo', scale: 1.08 },
-  { family: 'Lavishly Yours', scale: 1.05 },
-] as const;
-export const nameFont = (family?: string) => NAME_FONTS.find((f) => f.family === family) ?? NAME_FONTS[0];
-
+/** Script fonts for the guest's name, with the scale that evens out their sizes. */
+export const NAME_FONTS: readonly NameFont[] = layout.NAME_FONTS;
+export const nameFont: (family?: string) => NameFont = layout.nameFont;
 /** Long names go on two balanced lines so they stay legible inside the slot. Size is in % of card width. */
-export function nameLayout(name: string, slot: NameSlot, family?: string) {
-  let lines = name ? [name] : [];
-  if (name && name.length > 20 && name.includes(' ')) {
-    const mid = name.length / 2;
-    const spaces = [...name.matchAll(/ /g)].map((m) => m.index!);
-    const cut = spaces.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0];
-    lines = [name.slice(0, cut), name.slice(cut + 1)];
-  }
-  const longest = Math.max(0, ...lines.map((l) => l.length));
-  // Two lines must fit between "Cordially invites" and "to", so they are smaller and set tighter.
-  const cap = lines.length > 1 ? slot.maxSize * 0.55 : slot.maxSize;
-  const top = slot.top;
-  const lineHeight = lines.length > 1 ? 0.95 : 1.05;
-  const size = name ? Math.min(cap, (slot.maxSize * 13) / Math.max(13, longest)) * nameFont(family).scale : 0;
-  return { lines, top, size, lineHeight, family: nameFont(family).family };
-}
+export const nameLayout: (name: string, slot: NameSlot, family?: string) => NameLayout = layout.nameLayout;
+export const CODE_SPACING: number = layout.CODE_SPACING;
+export const CARD_INK: string = layout.INK;

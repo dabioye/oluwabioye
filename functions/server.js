@@ -100,8 +100,40 @@ const publicGuest = (g) => ({ ...g, link: inviteLink(g), message: message(g) });
 const inviteGuest = (g) => ({ name: g.name, code: g.code, events: g.events, rsvp: g.rsvp, rsvpNote: g.rsvpNote, driverCard: !!g.driverCard });
 whatsapp.setValues(async (g) => ({ name: g.name, first: g.name.split(/\s+/)[0], code: g.code, link: inviteLink(g), rsvpBy: longDate((await content.current()).rsvpBy) }));
 whatsapp.setInboxLink((thread) => `${BASE_URL()}/admin/inbox?thread=${encodeURIComponent(thread)}`);
-// Auto-send the WhatsApp invitation when a guest is added or imported, if turned on in Edit website
-// (and the template doesn't need each guest's card, which only the desk can draw).
+// Guests' personalised cards for sends that don't come from the desk, drawn on the server the same way.
+// The card artwork is an upload (/media/…), a built-in file on the invite site (/img/…) or a full URL.
+const artwork = new Map(); // src -> { at, buf }
+async function cardArtwork(src) {
+  const hit = artwork.get(src);
+  if (hit && Date.now() - hit.at < 10 * 60e3) return hit.buf;
+  let buf;
+  if (src.startsWith('/media/')) buf = (await store.readMedia(src.slice('/media/'.length)))?.buf;
+  else {
+    const r = await fetch(src.startsWith('/') ? `${INVITE_URL()}${src}` : src, { signal: AbortSignal.timeout(15_000) });
+    if (r.ok) buf = Buffer.from(await r.arrayBuffer());
+  }
+  if (!buf?.length) throw new Error('the invitation card image couldn’t be loaded');
+  artwork.set(src, { at: Date.now(), buf });
+  return buf;
+}
+whatsapp.setCardMaker(async (g) => {
+  const c = await content.current();
+  const { renderCard } = require('./src/card'); // loads the image library only when a card is needed
+  return renderCard({
+    image: await cardArtwork(c.invitationArt?.trad || cfg.invitationArt.trad),
+    name: g.name,
+    code: g.code,
+    nameSlot: cfg.invitationArt.nameSlot,
+    codeSlot: cfg.invitationArt.codeSlot,
+    font: c.nameFont,
+  });
+});
+// The card is the traditional invitation, so with a card template only guests invited to it are sent one
+// (the desk does the same).
+async function forTemplate(guests) {
+  return (await whatsapp.needsImage()) ? guests.filter((g) => g.events.includes('trad')) : guests;
+}
+// Auto-send the WhatsApp invitation when a guest is added or imported, if turned on in Edit website.
 const autoSend = async () => whatsapp.configured() && !!(await content.current()).waAutoSend && !(await whatsapp.needsCard().catch(() => true));
 const onPublicHost = (req) => !!env('INVITE_URL') && hostOf(INVITE_URL()) !== hostOf(BASE_URL()) && req.hostname === hostOf(BASE_URL());
 
@@ -229,7 +261,7 @@ api.post('/guests', wrap(async (req, res) => {
   let g;
   try { g = await store.create(req.body); } catch (e) { return res.status(400).json({ error: e.message }); }
   let whatsappResult = null;
-  if (whatsapp.eligible(g) && (await autoSend())) whatsappResult = await whatsapp.sendInvite(g);
+  if (whatsapp.eligible(g) && (await autoSend()) && (await forTemplate([g])).length) whatsappResult = await whatsapp.sendInvite(g);
   res.json({ ...publicGuest((await store.byId(g.id)) || g), whatsapp: whatsappResult });
 }));
 api.patch('/guests/:id', wrap(async (req, res) => {
@@ -266,8 +298,9 @@ api.post('/import', wrap(async (req, res) => {
     created.push(await store.create(r));
     added++;
   }
-  const sendable = created.filter(whatsapp.eligible);
-  const whatsappResult = sendable.length && (await autoSend()) ? await whatsapp.sendMany(sendable) : null;
+  const auto = created.some(whatsapp.eligible) && (await autoSend());
+  const sendable = auto ? await forTemplate(created.filter(whatsapp.eligible)) : [];
+  const whatsappResult = sendable.length ? await whatsapp.sendMany(sendable) : null;
   res.json({ added, skipped, whatsapp: whatsappResult });
 }));
 api.get('/export.csv', wrap(async (req, res) => {
@@ -305,13 +338,13 @@ api.post('/guests/:id/whatsapp', express.raw({ type: 'image/jpeg', limit: '4mb' 
   res.status(r.ok ? 200 : 400).json({ ...r, guest: publicGuest(await store.byId(g.id)) });
 }));
 // Send to every WhatsApp guest who hasn't had an API invite yet (150 per call; the page repeats until done).
-// Only for templates that don't need each guest's card: the desk sends those one by one with the card.
+// With a card template, the server draws each guest's card.
 api.post('/whatsapp/send-pending', wrap(async (req, res) => {
   const wa = await whatsapp.status();
   if (!wa.configured) return res.status(400).json({ error: 'WhatsApp API is not set up yet.' });
   if (!wa.ready) return res.status(409).json({ error: (wa.problems || []).join(' ') || 'WhatsApp is not ready to send invitations.' });
   if (await whatsapp.needsCard()) return res.status(409).json({ error: 'This template needs each guest’s card. Send from the invitation desk.' });
-  const pending = (await store.all()).filter(whatsapp.eligible).filter((g) => g.waStatus !== 'failed' || req.body.retryFailed);
+  const pending = (await forTemplate(await store.all())).filter(whatsapp.eligible).filter((g) => g.waStatus !== 'failed' || req.body.retryFailed);
   const batch = pending.slice(0, 150);
   const r = await whatsapp.sendMany(batch);
   res.json({ ...r, remaining: pending.length - batch.length });

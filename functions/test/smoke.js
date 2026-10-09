@@ -291,7 +291,7 @@ const store = require('../src/store');
   assert.equal(adaThread.messages.at(-1).text, 'RSVP: Regretfully declines\n\nTravelling that week, so sorry');
   assert(new Date(adaThread.windowUntil) > new Date(), 'her earlier WhatsApp message still keeps the window open');
 
-  // A template that starts with an image gets each guest's card from the desk; nothing can go out without it
+  // A template that starts with an image gets each guest's card: from the desk, or drawn by the server
   meta.template = { ...meta.template, components: [{ type: 'HEADER', format: 'IMAGE' }, ...meta.template.components] };
   wa._reset();
   r = await req(`/api/admin/guests/${g.id}/whatsapp`, { method: 'POST', headers: { cookie: admin, 'Content-Type': 'image/jpeg' }, body: png });
@@ -301,13 +301,40 @@ const store = require('../src/store');
   assert(upload.body instanceof FormData && (await upload.body.get('file').arrayBuffer()).byteLength === png.length, 'card uploaded');
   assert.deepEqual(lastSend().template.components[0], { type: 'header', parameters: [{ type: 'image', image: { id: 'MEDIA1' } }] });
   assert.equal(one.guest.waMessageId, one.id);
+  // Without a card from the desk, the server draws the guest's card itself (here first without any artwork)
   r = await req(`/api/admin/guests/${g.id}/whatsapp`, { method: 'POST', headers: { cookie: admin } });
   one = await r.json();
   assert.equal(r.status, 400);
-  assert.match(one.error, /card/);
-  assert.equal((await req('/api/admin/whatsapp/send-pending', json('POST', {}, admin))).status, 409);
-  r = await req('/api/admin/guests', json('POST', { name: 'Waits For Card', phone: '08030000009' }, admin));
-  assert.equal((await r.json()).whatsapp, null, 'auto-send holds back when the card is needed');
+  assert.match(one.error, /Couldn’t draw Tope Omidiji’s card/);
+  const art = require('fs').readFileSync(require('path').join(__dirname, '../../web/site-assets/invite/img/invite-trad.jpg'));
+  r = await req('/api/admin/media', { method: 'POST', headers: { cookie: admin, 'Content-Type': 'image/jpeg' }, body: art });
+  const artUrl = (await r.json()).url;
+  await req('/api/admin/site', json('PUT', { invitationArt: { trad: artUrl }, nameFont: 'Cookie' }, admin));
+  const cardUploaded = async () => {
+    const f = meta.calls.filter((c) => c.path === '/PHONE1/media').at(-1).body.get('file');
+    const meta2 = await require('sharp')(Buffer.from(await f.arrayBuffer())).metadata();
+    return [meta2.format, meta2.width, meta2.height];
+  };
+  r = await req(`/api/admin/guests/${g.id}/whatsapp`, { method: 'POST', headers: { cookie: admin } });
+  assert.equal(r.status, 200, JSON.stringify(await r.clone().json()));
+  assert.deepEqual(await cardUploaded(), ['jpeg', 1024, 1536], 'the server drew a full-size card');
+  // Send all pending and automatic sending draw cards too; guests not invited to the traditional wedding get none
+  await req('/api/admin/site', json('PUT', { waAutoSend: false }, admin));
+  const churchOnly = await (await req('/api/admin/guests', json('POST', { name: 'Church Only', phone: '08030000010', events: ['church'] }, admin))).json();
+  const waiting = await (await req('/api/admin/guests', json('POST', { name: 'Pending With Card', phone: '08030000013' }, admin))).json();
+  r = await req('/api/admin/whatsapp/send-pending', json('POST', {}, admin));
+  const pend2 = await r.json();
+  assert.equal(r.status, 200, JSON.stringify(pend2));
+  assert(pend2.sent >= 1 && (await store.byId(waiting.id)).waMessageId, 'pending guests sent with their cards');
+  assert.deepEqual(await cardUploaded(), ['jpeg', 1024, 1536]);
+  assert(!(await store.byId(churchOnly.id)).waMessageId, 'church-only guests are not sent the traditional card');
+  await req('/api/admin/site', json('PUT', { waAutoSend: true }, admin));
+  r = await req('/api/admin/guests', json('POST', { name: 'Auto With Card', phone: '08030000011' }, admin));
+  const autoCard = await r.json();
+  assert(autoCard.whatsapp && autoCard.whatsapp.ok, 'auto-send goes with a server-drawn card: ' + JSON.stringify(autoCard.whatsapp));
+  assert.deepEqual(await cardUploaded(), ['jpeg', 1024, 1536]);
+  r = await req('/api/admin/guests', json('POST', { name: 'Auto Church Only', phone: '08030000012', events: ['church'] }, admin));
+  assert.equal((await r.json()).whatsapp, null, 'no traditional card for a church-only guest');
   assert.equal((await req(`/api/admin/guests/${g.id}/whatsapp`, { method: 'POST', headers: { cookie: gate } })).status, 401);
   await req('/api/admin/site', json('PUT', { waAutoSend: false }, admin));
 

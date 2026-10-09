@@ -175,14 +175,26 @@ function describe(t) {
 let valuesFor = (g) => ({ name: g.name, first: g.name.split(/\s+/)[0], code: g.code, link: g.code, rsvpBy: '' }); // set by the server
 const setValues = (fn) => (valuesFor = fn);
 
-/** Can this guest's invitation go out without a card from the desk (auto-send, send-pending)? */
-async function needsCard() {
+// Draws a guest's personalised card on the server, for sends that don't come from the desk (set by the server).
+let makeCard = null;
+const setCardMaker = (fn) => (makeCard = fn);
+
+/** Does the approved template start with an image (the guest's card)? */
+async function needsImage() {
   const t = await template();
   if (t.status !== 'APPROVED') throw new WhatsAppError(`The WhatsApp template is ${String(t.status).toLowerCase()}, not approved`);
-  return describe(t).needsImage && !settings().headerImage;
+  return describe(t).needsImage;
 }
 
-/** Send one guest's invitation. `card` is their personalised card as JPEG, for templates that start with an image. */
+/** Does this template need a card that only the desk can supply (so auto-send and send-pending can't go)? */
+async function needsCard() {
+  return (await needsImage()) && !makeCard && !settings().headerImage;
+}
+
+/**
+ * Send one guest's invitation. `card` is their personalised card as JPEG (from the desk) for templates that
+ * start with an image; without it, the server draws the card itself.
+ */
 async function sendInvite(guest, card) {
   if (!configured()) return { ok: false, error: 'WhatsApp API is not set up yet (WHATSAPP_TOKEN / WHATSAPP_PHONE_ID).' };
   const to = toWaNumber(guest.phone);
@@ -196,6 +208,13 @@ async function sendInvite(guest, card) {
     if (t.status !== 'APPROVED') throw new WhatsAppError(`The WhatsApp template is ${String(t.status).toLowerCase()}, not approved`);
     let header = null;
     if (describe(t).needsImage) {
+      if (!card?.length && makeCard) {
+        try {
+          card = await makeCard(guest);
+        } catch (e) {
+          throw new WhatsAppError(`Couldn’t draw ${guest.name}’s card: ${e.message}`);
+        }
+      }
       if (card?.length) {
         const form = new FormData();
         form.append('messaging_product', 'whatsapp');
@@ -203,7 +222,7 @@ async function sendInvite(guest, card) {
         form.append('file', new Blob([card], { type: 'image/jpeg' }), 'invitation.jpg');
         header = { id: (await graph(`/${s.phoneId}/media`, { method: 'POST', form })).id };
       } else if (s.headerImage) header = { link: s.headerImage };
-      else throw new WhatsAppError('This template starts with an image, so send it from the invitation desk with the guest’s card');
+      else throw new WhatsAppError('This template starts with an image, so the guest’s card is needed');
     }
     const { components } = fill(t, await valuesFor(guest), header);
     const body = await graph(`/${s.phoneId}/messages`, {
@@ -396,7 +415,7 @@ async function alert(name, text, thread) {
 }
 
 module.exports = {
-  configured, status, preview, needsCard, sendInvite, sendMany, eligible, toWaNumber, setValues,
+  configured, status, preview, needsCard, needsImage, setCardMaker, sendInvite, sendMany, eligible, toWaNumber, setValues,
   verifyChallenge, signatureOk, handleWebhook, reply, windowUntil, rsvpToInbox, setInboxLink, WhatsAppError,
   _setFetch: (f) => (fetchImpl = f), _reset: () => (cached = {}),
 };
