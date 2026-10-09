@@ -3,9 +3,8 @@
 //
 // The approved template is read from Meta (language, header, variables, button), so the wording can change
 // in WhatsApp Manager without a code change: each variable is filled from its name or its example value.
-// If the template can't be read, the layout from the README is used: body {{1}} name, {{2}} RSVP date,
-// URL button {{1}} the guest's code. When the template starts with an image, the guest's personalised card
-// (drawn by the invitation desk) is uploaded and sent with it.
+// If the approved template can't be read, API sending is blocked and the desk falls back to a manual WhatsApp link.
+// When the template starts with an image, the guest's personalised card (drawn by the invitation desk) is uploaded.
 const crypto = require('crypto');
 const cfg = require('./config');
 const store = require('./store');
@@ -178,7 +177,8 @@ const setValues = (fn) => (valuesFor = fn);
 
 /** Can this guest's invitation go out without a card from the desk (auto-send, send-pending)? */
 async function needsCard() {
-  const t = await templateOrFallback();
+  const t = await template();
+  if (t.status !== 'APPROVED') throw new WhatsAppError(`The WhatsApp template is ${String(t.status).toLowerCase()}, not approved`);
   return describe(t).needsImage && !settings().headerImage;
 }
 
@@ -192,7 +192,8 @@ async function sendInvite(guest, card) {
   }
   const s = settings();
   try {
-    const t = await templateOrFallback();
+    const t = await template();
+    if (t.status !== 'APPROVED') throw new WhatsAppError(`The WhatsApp template is ${String(t.status).toLowerCase()}, not approved`);
     let header = null;
     if (describe(t).needsImage) {
       if (card?.length) {
@@ -248,7 +249,7 @@ async function status() {
   if (info.expiresAt) out.problems.push(`The access token expires on ${info.expiresAt.slice(0, 10)}. Make one that never expires.`);
   if (t.error)
     out.problems.push(
-      `Couldn’t read the template (${t.error}), so messages use the README layout and WhatsApp may drop them. Give the system user the WhatsApp account with full control and make a new token, or set WHATSAPP_WABA_ID.`,
+      `Couldn’t read the approved template (${t.error}), so WhatsApp API sending is paused. Give the system user access to this WhatsApp account and its templates, then refresh this panel.`,
     );
   else if (t.status !== 'APPROVED') out.problems.push(`The template is ${String(t.status).toLowerCase()} in WhatsApp Manager, not approved.`);
   out.template = describe(t.error ? fallbackTemplate() : t);
