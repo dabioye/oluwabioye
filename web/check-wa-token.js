@@ -8,7 +8,7 @@
 //   WA_TOKEN="$T" WA_PHONE_ID=<phone number id> WA_WABA_ID=<whatsapp business account id> node check-wa-token.js
 //   unset T
 
-const EXPECT_NUMBER = '8072692636';          // last 10 digits of the wedding sender number
+const EXPECT_NUMBER = '8072692636'; // last 10 digits of the wedding sender number
 const EXPECT_TEMPLATE = 'oluwabioye_invitation';
 const V = process.env.WHATSAPP_API_VERSION || process.env.WA_API_VERSION || 'v23.0';
 
@@ -25,7 +25,10 @@ const get = async (path) => {
 };
 let bad = 0;
 const pass = (m) => console.log('  ✓ ' + m);
-const fail = (m) => { bad++; console.log('  ✗ ' + m); };
+const fail = (m) => {
+  bad++;
+  console.log('  ✗ ' + m);
+};
 
 (async () => {
   console.log('\n1. Who does this token belong to?');
@@ -43,7 +46,9 @@ const fail = (m) => { bad++; console.log('  ✗ ' + m); };
 
   console.log('\n3. Can it see the WhatsApp Business Account and the template?');
   const waba = await get(`${wabaId}?fields=name,id`);
-  waba.ok ? pass(`WhatsApp account: ${waba.j.name} (${waba.j.id})`) : fail(`cannot read WhatsApp account ${wabaId}: ${waba.j.error?.message}  ← assets not assigned to this system user, or wrong business`);
+  waba.ok
+    ? pass(`WhatsApp account: ${waba.j.name} (${waba.j.id})`)
+    : fail(`cannot read WhatsApp account ${wabaId}: ${waba.j.error?.message}  ← assets not assigned to this system user, or wrong business`);
 
   const nums = await get(`${wabaId}/phone_numbers?fields=id,display_phone_number`);
   if (nums.ok) {
