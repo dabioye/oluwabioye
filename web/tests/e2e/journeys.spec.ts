@@ -1,7 +1,9 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { chromium, expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import QRCode from 'qrcode';
+import sharp from 'sharp';
 import { INVITE, META, PUBLIC } from '../../playwright.config';
 
 // Skip the wax-seal envelope unless a test is about it.
@@ -354,4 +356,41 @@ test('guests’ WhatsApp replies arrive in the inbox, alert the couple, and can 
   await page.goto(`${PUBLIC}/admin/inbox?thread=${lara.id}`);
   await expect(page.getByRole('region', { name: 'Conversation with Lara Bello' }).getByRole('log').getByText('See you on the 17th, Lara!')).toBeVisible();
   expect(browserErrors).toEqual([]);
+});
+
+test('the gate camera shows a viewfinder and checks a guest in as soon as their card reads', async ({ request }, info) => {
+  test.setTimeout(90_000); // starts its own browser with a fake camera
+  const g = await addGuest(request, { name: 'Femi Lawal', phone: '08044444444' });
+  // A fake camera "filming" the guest's access-card QR code (Chrome loops an MJPEG file as the camera).
+  const qr = await QRCode.toBuffer(`${INVITE}/c/${g.code}`, { width: 300, margin: 2 });
+  const frame = await sharp({ create: { width: 640, height: 480, channels: 3, background: '#fff' } })
+    .composite([{ input: qr, left: 170, top: 90 }])
+    .jpeg()
+    .toBuffer();
+  const video = info.outputPath('qr.mjpeg');
+  fs.mkdirSync(path.dirname(video), { recursive: true });
+  fs.writeFileSync(video, Buffer.concat(Array.from({ length: 10 }, () => frame)));
+  const browser = await chromium.launch({
+    ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}),
+    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-video-capture=${video}`],
+  });
+  try {
+    const ctx = await browser.newContext({ permissions: ['camera'], viewport: { width: 412, height: 915 } });
+    const page = await ctx.newPage();
+    await page.goto(`${INVITE}/checkin`);
+    await page.getByLabel('PIN').fill('4321');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Scan access card' }).click();
+    // The camera view stays on screen, with the square to aim at.
+    const view = page.locator('#reader video');
+    await expect(view).toBeVisible({ timeout: 15_000 });
+    expect((await view.boundingBox())!.width).toBeGreaterThan(250);
+    await expect(page.getByText('Hold the QR code inside the square')).toBeVisible();
+    // No button to press: the guest is checked in as soon as the code reads.
+    await expect(page.getByText('Welcome')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText('Femi Lawal').first()).toBeVisible();
+    await page.getByRole('button', { name: 'Stop camera' }).click();
+  } finally {
+    await browser.close();
+  }
 });
