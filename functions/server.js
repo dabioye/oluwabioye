@@ -12,6 +12,7 @@ const content = require('./src/content');
 const { weekday, longDate } = require('./src/dates');
 const { parseCsv, toCsv } = require('./src/csv');
 const whatsapp = require('./src/whatsapp');
+const email = require('./src/email');
 
 const PORT = process.env.PORT || 3000;
 const env = (k) => process.env[k] || '';
@@ -116,7 +117,7 @@ async function cardArtwork(src) {
   artwork.set(src, { at: Date.now(), buf });
   return buf;
 }
-whatsapp.setCardMaker(async (g) => {
+const guestCard = async (g) => {
   const c = await content.current();
   const { renderCard } = require('./src/card'); // loads the image library only when a card is needed
   return renderCard({
@@ -127,7 +128,11 @@ whatsapp.setCardMaker(async (g) => {
     codeSlot: cfg.invitationArt.codeSlot,
     font: c.nameFont,
   });
-});
+};
+whatsapp.setCardMaker(guestCard);
+// Email invitations: the traditional card goes with them for guests invited to the traditional wedding.
+const emailInvite = (g) => email.sendInvite(g, { text: message(g), link: inviteLink(g), card: g.events.includes('trad') ? guestCard(g) : null });
+const autoEmail = async () => email.configured() && !!(await content.current()).waAutoSend;
 // The card is the traditional invitation, so with a card template only guests invited to it are sent one
 // (the desk does the same).
 async function forTemplate(guests) {
@@ -262,7 +267,9 @@ api.post('/guests', wrap(async (req, res) => {
   try { g = await store.create(req.body); } catch (e) { return res.status(400).json({ error: e.message }); }
   let whatsappResult = null;
   if (whatsapp.eligible(g) && (await autoSend()) && (await forTemplate([g])).length) whatsappResult = await whatsapp.sendInvite(g);
-  res.json({ ...publicGuest((await store.byId(g.id)) || g), whatsapp: whatsappResult });
+  // An email address, when given, gets the invitation by email too.
+  const emailResult = email.eligible(g) && (await autoEmail()) ? await emailInvite(g) : null;
+  res.json({ ...publicGuest((await store.byId(g.id)) || g), whatsapp: whatsappResult, email: emailResult });
 }));
 api.patch('/guests/:id', wrap(async (req, res) => {
   const g = await store.update(req.params.id, req.body);
@@ -301,7 +308,14 @@ api.post('/import', wrap(async (req, res) => {
   const auto = created.some(whatsapp.eligible) && (await autoSend());
   const sendable = auto ? await forTemplate(created.filter(whatsapp.eligible)) : [];
   const whatsappResult = sendable.length ? await whatsapp.sendMany(sendable) : null;
-  res.json({ added, skipped, whatsapp: whatsappResult });
+  let emailResult = null;
+  const toEmail = created.filter(email.eligible);
+  if (toEmail.length && (await autoEmail())) {
+    const rs = [];
+    for (const g of toEmail) rs.push(await emailInvite(g)); // one at a time: mail servers dislike bursts
+    emailResult = { sent: rs.filter((r) => r.ok).length, failed: rs.filter((r) => !r.ok).map((r) => r.error) };
+  }
+  res.json({ added, skipped, whatsapp: whatsappResult, email: emailResult });
 }));
 api.get('/export.csv', wrap(async (req, res) => {
   const all = await store.all();
@@ -348,6 +362,13 @@ api.post('/whatsapp/send-pending', wrap(async (req, res) => {
   const batch = pending.slice(0, 150);
   const r = await whatsapp.sendMany(batch);
   res.json({ ...r, remaining: pending.length - batch.length });
+}));
+// Email: whether it is set up, and sending one guest their invitation by email.
+api.get('/email', (req, res) => res.json({ configured: email.configured(), from: email.configured() ? email.from() : '' }));
+api.post('/guests/:id/email', wrap(async (req, res) => {
+  const g = await guestOr404(req, res); if (!g) return;
+  const r = await emailInvite(g);
+  res.status(r.ok ? 200 : 400).json({ ...r, guest: publicGuest(await store.byId(g.id)) });
 }));
 // Inbox: guests' WhatsApp replies, and free-text answers while their 24-hour window is open.
 api.get('/inbox', wrap(async (req, res) => {

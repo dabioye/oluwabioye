@@ -41,6 +41,8 @@ export type InviteData = {
 /** What an automatic WhatsApp send did, when adding or importing guests. */
 export type WhatsAppResult = { ok: boolean; id?: string; error?: string };
 export type WhatsAppBatch = { sent: number; failed: string[] };
+/** GET /api/admin/email: whether invitations can go out by email, and from which address. */
+export type EmailStatus = { configured: boolean; from: string };
 
 /** A guest as the invitation desk sees them. */
 export type Guest = {
@@ -73,6 +75,9 @@ export type Guest = {
   waError?: string;
   waSentAt?: string;
   waReadAt?: string;
+  /** Email invitation: when it was sent, or why the mail server refused it. */
+  emailSentAt?: string;
+  emailError?: string;
 };
 
 /** GET /api/admin/whatsapp: whether invitations can go out through WhatsApp Business. */

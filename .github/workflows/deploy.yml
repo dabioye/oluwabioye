@@ -81,6 +81,11 @@ jobs:
           echo "WHATSAPP_HEADER_IMAGE=${{ vars.WHATSAPP_HEADER_IMAGE || 'none' }}" >> functions/.env
           echo "WHATSAPP_ALERT_TO=${{ vars.WHATSAPP_ALERT_TO || 'none' }}" >> functions/.env
           echo "WHATSAPP_WABA_ID=${{ vars.WHATSAPP_WABA_ID || 'none' }}" >> functions/.env
+          echo "SMTP_HOST=${{ vars.SMTP_HOST || 'none' }}" >> functions/.env
+          echo "SMTP_PORT=${{ vars.SMTP_PORT || '465' }}" >> functions/.env
+          echo "SMTP_USER=${{ vars.SMTP_USER || 'none' }}" >> functions/.env
+          echo "MAIL_FROM=${{ vars.MAIL_FROM || 'none' }}" >> functions/.env
+          echo "MAIL_REPLY_TO=${{ vars.MAIL_REPLY_TO || 'none' }}" >> functions/.env
       - name: Deploy
         if: env.SA != ''
         run: |

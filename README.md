@@ -183,6 +183,36 @@ Meta app → WhatsApp → Configuration → Webhook:
 
 A new WhatsApp Business account can message about 250 people a day, which covers the whole guest list.
 
+## Email invitations
+
+Guests with an email address can get their invitation by email: their personalised card, the invitation message and a **View your invitation & RSVP** button.
+- With **Edit website → Automatic invitations** on, they're emailed as soon as they're added or imported, as well as sent on WhatsApp.
+- On the desk, **Email** sends one by hand. For guests whose *Send via* is Email, it's the **Send · Email** button.
+
+It works with any email account that allows SMTP, for example:
+- Gmail, with an app password: `smtp.gmail.com`, port `465`, about 500 emails a day;
+- Zoho Mail;
+- Namecheap Private Email;
+- Resend.
+
+Set it up like this:
+
+1. **The password, as a secret** (it must exist before the next deploy, or the deploy fails; use `none` until you're ready):
+   ```bash
+   firebase functions:secrets:set SMTP_PASS --project sarahanddamilare
+   ```
+2. **The settings, as GitHub repo variables** (Settings → Secrets and variables → Actions → Variables):
+
+   | Variable | Example |
+   | --- | --- |
+   | `SMTP_HOST` | `smtp.gmail.com` |
+   | `SMTP_PORT` | `465` (the default) |
+   | `SMTP_USER` | the mailbox, e.g. `sarahanddamilare@gmail.com` |
+   | `MAIL_FROM` | optional, e.g. `Sarah & Damilare <sarahanddamilare@gmail.com>` |
+   | `MAIL_REPLY_TO` | optional, where replies go |
+
+3. Redeploy. **Edit website** then says which address invitations are emailed from. Email yourself once from the desk to check it.
+
 ## Sending traditional invitations
 
 1. Import your list (`guest-template.csv` shows the columns) or add guests one by one.

@@ -20,11 +20,14 @@ export function ImportDialog({ open, onClose, onImported }: { open: boolean; onC
     if (!text.trim()) return setResult('Paste some rows or choose a file first.');
     setBusy(true);
     try {
-      const r = await api<{ added: number; skipped: string[]; whatsapp: WhatsAppBatch | null }>('/api/admin/import', { body: { csv: text } });
+      const r = await api<{ added: number; skipped: string[]; whatsapp: WhatsAppBatch | null; email: WhatsAppBatch | null }>('/api/admin/import', {
+        body: { csv: text },
+      });
       setResult(
         `Added ${r.added} guest${r.added === 1 ? '' : 's'}.` +
           (r.skipped.length ? ` Skipped ${r.skipped.length} already on the list.` : '') +
-          (r.whatsapp ? ` WhatsApp: ${r.whatsapp.sent} sent${r.whatsapp.failed.length ? `, ${r.whatsapp.failed.length} failed` : ''}.` : ''),
+          (r.whatsapp ? ` WhatsApp: ${r.whatsapp.sent} sent${r.whatsapp.failed.length ? `, ${r.whatsapp.failed.length} failed` : ''}.` : '') +
+          (r.email ? ` Email: ${r.email.sent} sent${r.email.failed.length ? `, ${r.email.failed.length} failed` : ''}.` : ''),
       );
       setText('');
       onImported();

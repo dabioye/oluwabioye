@@ -105,9 +105,10 @@ function GuestForm({ open, guest, groups, onClose, onSaved }: Props) {
         if (f.rsvp !== guest.rsvp) await api(`/api/admin/guests/${guest.id}/rsvp`, { body: { rsvp: f.rsvp } });
         toast.success('Saved');
       } else {
-        const g = await api<Guest & { whatsapp: WhatsAppResult | null }>('/api/admin/guests', { body });
+        const g = await api<Guest & { whatsapp: WhatsAppResult | null; email: WhatsAppResult | null }>('/api/admin/guests', { body });
         const wa = g.whatsapp ? (g.whatsapp.ok ? ' · WhatsApp invite sent' : ` · WhatsApp failed: ${g.whatsapp.error}`) : '';
-        (g.whatsapp && !g.whatsapp.ok ? toast.warning : toast.success)(`${g.name} added · code ${g.code}${wa}`);
+        const mail = g.email ? (g.email.ok ? ' · Email sent' : ` · Email failed: ${g.email.error}`) : '';
+        (g.whatsapp?.ok === false || g.email?.ok === false ? toast.warning : toast.success)(`${g.name} added · code ${g.code}${wa}${mail}`);
       }
       onClose();
       onSaved();
