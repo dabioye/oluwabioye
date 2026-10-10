@@ -103,6 +103,13 @@ test('guest enters their code, is remembered, RSVPs and gets their access card',
 
   // RSVP: a declining guest is asked for a reason; accepting sends straight away, with the note.
   await expect(page.getByRole('heading', { name: 'Send RSVP' })).toBeVisible();
+  await expect(page.locator('#respond')).toContainText('Your response helps us properly plan for you as our most esteemed guest.');
+  // The RSVP is the first thing on the page, before the card and the details.
+  expect(
+    await page.evaluate(
+      () => !!(document.getElementById('respond')!.compareDocumentPosition(document.getElementById('invitation')!) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ),
+  ).toBe(true);
   await expect(page.locator('#respond')).toContainText('Kindly respond by 30 November 2026');
   await page.getByRole('button', { name: 'Regretfully Decline' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Kindly tell us why' })).toBeVisible();
@@ -236,6 +243,21 @@ test('with WhatsApp Business, the desk sends each guest their card and message f
   await expect(dialog.getByText(/Done\. 1 sent of 1/)).toBeVisible({ timeout: 20_000 });
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(row.getByText('WhatsApp queued')).toBeVisible();
+
+  // "Message" still sends from WhatsApp on this device: the guest's chat opens with the message, then the card.
+  await page.evaluate(() => {
+    const w = window as unknown as { opened: string[] };
+    w.opened = [];
+    window.open = (url?: string | URL) => (w.opened.push(String(url)), null);
+    Object.assign(navigator, { canShare: () => true, share: async () => {} });
+  });
+  await row.getByRole('button', { name: 'Message' }).click();
+  const viaPhone = await page.evaluate(() => (window as unknown as { opened: string[] }).opened);
+  expect(viaPhone[0]).toMatch(/^https:\/\/wa\.me\/2348077777777\?text=/);
+  const cardStep = page.getByRole('dialog', { name: /Now send Kemi’s card/ });
+  await expect(cardStep.getByRole('img', { name: 'Invitation card for Kemi Adeyemi' })).toBeVisible({ timeout: 20_000 });
+  await cardStep.getByRole('button', { name: 'Share card' }).click();
+  await expect(cardStep).toBeHidden();
 
   let meta = await (await request.get(`${META}/__sent`)).json();
   const msg = meta.sent.at(-1);
