@@ -12,7 +12,7 @@ import { api, ApiError } from '@/lib/api';
 import type { StoryMoment } from '@/lib/config';
 import { shrink } from '@/lib/image';
 import { NAME_FONTS } from '@/lib/invitation';
-import type { SiteSettings, WhatsAppStatus } from '@/lib/types';
+import type { EmailStatus, SiteSettings, WhatsAppStatus } from '@/lib/types';
 import { StaffHeader, StaffPage } from '../staff-shell';
 
 async function upload(file: File) {
@@ -113,8 +113,10 @@ export function SiteEditor() {
   const [uploading, setUploading] = useState('');
   const galleryInput = useRef<HTMLInputElement>(null);
   const [wa, setWa] = useState<WhatsAppStatus | null>(null);
+  const [mail, setMail] = useState<EmailStatus | null>(null);
   useEffect(() => {
     api<WhatsAppStatus>('/api/admin/whatsapp').then(setWa, () => {});
+    api<EmailStatus>('/api/admin/email').then(setMail, () => {});
   }, []);
 
   useEffect(() => {
@@ -429,12 +431,12 @@ export function SiteEditor() {
               </label>
             </fieldset>
             <fieldset className="grid gap-2">
-              <legend className="mb-2 text-[0.72rem] tracking-[0.12em] text-ivory-dim uppercase">WhatsApp invitations</legend>
+              <legend className="mb-2 text-[0.72rem] tracking-[0.12em] text-ivory-dim uppercase">Automatic invitations</legend>
               <label className="flex items-center justify-between gap-3 text-ivory">
-                Send the WhatsApp invitation automatically when a guest is added or imported
+                Send the invitation automatically when a guest is added or imported (WhatsApp, and email when they have an address)
                 <Switch
                   checked={!!s.waAutoSend}
-                  disabled={!s.waAutoSend && !wa?.ready}
+                  disabled={!s.waAutoSend && !wa?.ready && !mail?.configured}
                   onCheckedChange={(waAutoSend) => update((x) => ({ ...x, waAutoSend }))}
                 />
               </label>
@@ -448,6 +450,13 @@ export function SiteEditor() {
                       : wa.template?.needsImage
                         ? 'Each guest’s personalised card goes with their message, including when they’re sent automatically. Only guests invited to the traditional wedding are sent one. Turn this on only after a test send to yourself looks right.'
                         : 'WhatsApp API is connected. Turn this on only after a test send to yourself looks right.'}
+              </p>
+              <p className="m-0 text-[0.8rem] text-ivory-dim">
+                {!mail
+                  ? 'Checking email…'
+                  : mail.configured
+                    ? `Email is set up: guests with an email address are sent their invitation (with their card) from ${mail.from}.`
+                    : 'Email isn’t set up yet, so nothing goes by email. Add the SMTP settings and the SMTP_PASS secret, then redeploy.'}
               </p>
             </fieldset>
           </Section>

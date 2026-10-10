@@ -54,7 +54,7 @@ const store = require('../src/store');
   assert.match(g.code, /^[A-HJ-NP-Z2-9]{6}$/);
   assert(g.message.includes(g.link) && g.message.includes('traditional'));
   r = await req('/api/admin/import', json('POST', { csv: 'Full Name,Phone,Side,Events\n"Ade, Jnr",0802,bride,church\nTope Omidiji,08031234567,groom,trad' }, admin));
-  assert.deepEqual(await r.json(), { added: 1, skipped: ['Tope Omidiji'], whatsapp: null });
+  assert.deepEqual(await r.json(), { added: 1, skipped: ['Tope Omidiji'], whatsapp: null, email: null });
 
   // Code entry on the invite site: forgiving input, right code never counts against the guest
   const guestIp = { 'X-Forwarded-For': '10.0.0.1' };
@@ -335,6 +335,50 @@ const store = require('../src/store');
   assert.deepEqual(await cardUploaded(), ['jpeg', 1024, 1536]);
   r = await req('/api/admin/guests', json('POST', { name: 'Auto Church Only', phone: '08030000012', events: ['church'] }, admin));
   assert.equal((await r.json()).whatsapp, null, 'no traditional card for a church-only guest');
+
+  // ---------- Email invitations (a stand-in mail server) ----------
+  const mail = require('../src/email');
+  assert.deepEqual(await (await req('/api/admin/email', { headers: { cookie: admin } })).json(), { configured: false, from: '' });
+  r = await req('/api/admin/guests', json('POST', { name: 'No Mail Yet', phone: '08030000020', email: 'nomail@x.test' }, admin));
+  assert.equal((await r.json()).email, null, 'no email before it is set up');
+  Object.assign(process.env, { SMTP_HOST: 'json', SMTP_USER: 'invites@x.test', SMTP_PASS: 'pw', MAIL_FROM: 'Sarah & Damilare <invites@x.test>' });
+  assert.deepEqual(await (await req('/api/admin/email', { headers: { cookie: admin } })).json(), { configured: true, from: 'Sarah & Damilare <invites@x.test>' });
+  // Automatic sending is on: a guest with an email gets it by email as well as WhatsApp, with their card
+  r = await req('/api/admin/guests', json('POST', { name: 'Ngozi Eze', phone: '08030000021', email: 'ngozi@x.test' }, admin));
+  const ngozi = await r.json();
+  assert(ngozi.email && ngozi.email.ok, 'emailed on add: ' + JSON.stringify(ngozi.email));
+  assert(ngozi.whatsapp && ngozi.whatsapp.ok, 'and sent on WhatsApp');
+  assert(ngozi.emailSentAt && !ngozi.emailError);
+  let m = mail._sent.at(-1);
+  assert.equal(m.subject, 'Sarah & Damilare invite you to The Making of Oluwabioye');
+  assert.deepEqual([m.from.address, m.to[0].address, m.to[0].name], ['invites@x.test', 'ngozi@x.test', 'Ngozi Eze']);
+  assert(m.text.includes(`/i/${ngozi.code}`) && m.html.includes(`/i/${ngozi.code}`), 'the invitation link is in the email');
+  assert.deepEqual([m.attachments.length, m.attachments[0].cid, m.attachments[0].contentType], [1, 'card', 'image/jpeg']);
+  assert.deepEqual((await require('sharp')(Buffer.from(m.attachments[0].content, 'base64')).metadata()).width, 1024, 'the card is attached full size');
+  r = await req('/api/admin/guests', json('GET', undefined, admin));
+  assert((await r.json()).activity.some((a) => a.type === 'sent' && a.name === 'Ngozi Eze' && a.extra === 'Email'));
+  // Church-only guests are emailed without the traditional card; a guest without an email isn't emailed
+  r = await req('/api/admin/guests', json('POST', { name: 'Church Mail', phone: '08030000022', email: 'church@x.test', events: ['church'] }, admin));
+  assert((await r.json()).email.ok);
+  assert.equal(mail._sent.at(-1).attachments.length, 0);
+  r = await req('/api/admin/guests', json('POST', { name: 'Phone Only', phone: '08030000023' }, admin));
+  assert.equal((await r.json()).email, null);
+  // Imported guests with emails are emailed one by one
+  const before = mail._sent.length;
+  r = await req('/api/admin/import', json('POST', { csv: 'name,phone,email\nImport Mail One,08030000024,one@x.test\nImport Mail Two,08030000025,not-an-email\nImport No Mail,08030000026,' }, admin));
+  const impMail = await r.json();
+  assert.deepEqual(impMail.email, { sent: 1, failed: [] }, JSON.stringify(impMail.email));
+  assert.equal(mail._sent.length, before + 1);
+  // From the desk: one guest at a time (here someone added before email was set up)
+  const noMail = (await (await req('/api/admin/guests', { headers: { cookie: admin } })).json()).guests.find((x) => x.name === 'No Mail Yet');
+  r = await req(`/api/admin/guests/${noMail.id}/email`, json('POST', {}, admin));
+  assert.equal(r.status, 200);
+  assert.equal(mail._sent.at(-1).to[0].address, 'nomail@x.test');
+  r = await req(`/api/admin/guests/${ngozi.id}`, json('PATCH', { email: 'broken' }, admin));
+  r = await req(`/api/admin/guests/${ngozi.id}/email`, json('POST', {}, admin));
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).error, /no valid email/);
+  assert.equal((await req(`/api/admin/guests/${ngozi.id}/email`, json('POST', {}, gate))).status, 401);
   assert.equal((await req(`/api/admin/guests/${g.id}/whatsapp`, { method: 'POST', headers: { cookie: gate } })).status, 401);
   await req('/api/admin/site', json('PUT', { waAutoSend: false }, admin));
 

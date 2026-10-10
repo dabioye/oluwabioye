@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, Download, ImageDown, Link2, MessageCircle, Plus, Send, Trash2, Upload } from 'lucide-react';
+import { Copy, Download, ImageDown, Link2, Mail, MessageCircle, Plus, Send, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { api, ApiError } from '@/lib/api';
 import { cfg } from '@/lib/config';
 import { ago, longDate, weekday } from '@/lib/format';
 import { canShareImages, cardFileName, download, preloadCard, renderCard } from '@/lib/card-image';
-import type { Activity, ChurchRsvp, Guest, Side, SiteSettings, WhatsAppStatus } from '@/lib/types';
+import type { Activity, ChurchRsvp, EmailStatus, Guest, Side, SiteSettings, WhatsAppStatus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { StaffHeader, StaffPage } from '../staff-shell';
 import { GuestDialog } from './guest-dialog';
@@ -78,9 +78,25 @@ export function Desk() {
 
   // WhatsApp Business: when connected, invitations go out from the couple's number without opening WhatsApp.
   const [wa, setWa] = useState<WhatsAppStatus | null>(null);
+  const [mailReady, setMailReady] = useState(false);
+
+  /** Email the guest their invitation (with their card) from the wedding's email account. */
+  async function sendEmail(g: Guest) {
+    try {
+      await api(`/api/admin/guests/${g.id}/email`, { body: {} });
+      toast.success(`Invitation emailed to ${g.name}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Couldn’t send the email');
+    }
+    refresh();
+  }
   const [waSending, setWaSending] = useState<Guest[] | null>(null);
   useEffect(() => {
     api<WhatsAppStatus>('/api/admin/whatsapp').then(setWa, () => {});
+    api<EmailStatus>('/api/admin/email').then(
+      (m) => setMailReady(m.configured),
+      () => {},
+    );
   }, []);
   /** Can this guest's invitation go through WhatsApp Business (with their card, if the template needs one)? */
   const viaApi = (g: Guest) =>
@@ -325,6 +341,7 @@ export function Desk() {
                     onDelivered={toggleDelivered}
                     onSendWhatsApp={() => sendWithCard(g)}
                     onMessage={() => sendFromMyWhatsApp(g)}
+                    onEmail={mailReady && g.email ? () => sendEmail(g) : undefined}
                     viaApi={viaApi(g)}
                     onCard={cardSrc && getsCard(g) ? () => saveCard(g) : undefined}
                   />
@@ -374,6 +391,7 @@ function GuestRow({
   onDelivered,
   onSendWhatsApp,
   onMessage,
+  onEmail,
   viaApi,
   onCard,
 }: {
@@ -384,6 +402,8 @@ function GuestRow({
   onSendWhatsApp: () => void;
   /** Send from WhatsApp on this device (message, then card) instead of WhatsApp Business. */
   onMessage: () => void;
+  /** Email the invitation from the server (when email is set up and the guest has an address). */
+  onEmail?: () => void;
   viaApi: boolean;
   onCard?: () => void;
 }) {
@@ -414,6 +434,15 @@ function GuestRow({
             {g.waStatus === 'failed' && g.waError ? `: ${g.waError}` : ''}
           </Badge>
         )}
+        {(g.emailSentAt || g.emailError) && (
+          <Badge
+            variant="outline"
+            className={cn('mt-1 ml-1 text-[0.65rem] font-normal', g.emailError ? 'border-bad/50 text-bad' : 'border-ok/40 text-ok')}
+            title={g.emailError || undefined}
+          >
+            {g.emailError ? `Email failed: ${g.emailError}` : 'Email sent'}
+          </Badge>
+        )}
       </button>
       <div>
         <Badge variant="outline" className={cn('text-[0.7rem]', PILL[st].className)} title={g.rsvpNote || undefined}>
@@ -429,6 +458,10 @@ function GuestRow({
         ) : href && g.channel === 'whatsapp' ? (
           <Button size="sm" className="bg-[#1f7a4d] text-white hover:bg-[#25915b]" onClick={onSendWhatsApp}>
             <Send /> {(viaApi ? g.waMessageId : g.sentAt) ? 'Resend' : 'Send'} · WhatsApp
+          </Button>
+        ) : g.channel === 'email' && onEmail ? (
+          <Button size="sm" onClick={onEmail}>
+            <Send /> {g.emailSentAt ? 'Resend' : 'Send'} · Email
           </Button>
         ) : href ? (
           <Button asChild size="sm">
@@ -454,6 +487,11 @@ function GuestRow({
         >
           {g.phone ? <MessageCircle /> : <Copy />} Message
         </Button>
+        {onEmail && g.channel !== 'email' && (
+          <Button size="sm" variant="outline" className="border-gold/40 bg-transparent text-gold" onClick={onEmail} title="Email the invitation and card">
+            <Mail /> Email
+          </Button>
+        )}
         <Button size="sm" variant="outline" className="border-gold/40 bg-transparent text-gold" onClick={() => copy(g.link, 'Invitation link copied')}>
           <Link2 /> Link
         </Button>

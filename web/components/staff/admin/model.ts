@@ -62,6 +62,7 @@ export function activityText(a: Activity) {
     rsvp: `${a.name} ${a.extra === 'yes' ? 'is attending' : a.extra === 'no' ? 'can’t attend' : 'reset to awaiting reply'}`,
     checkin: `${a.name} arrived`,
     waread: `${a.name} read the WhatsApp invitation`,
+    emailfailed: `Email to ${a.name} failed${a.extra ? `: ${a.extra}` : ''}`,
     wareply: `${a.name} replied on WhatsApp: “${a.extra}”`,
     wafailed: `WhatsApp invite to ${a.name} failed${a.extra ? `: ${a.extra}` : ''}`,
     church: `${a.name} replied to the church RSVP (${a.extra})`,
