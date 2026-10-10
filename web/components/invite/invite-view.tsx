@@ -184,10 +184,7 @@ function RsvpBlock({ guest, qrSvg, rsvpBy, onSaved }: { guest: InviteGuest; qrSv
       <>
         <p className="lede mx-auto mt-1 max-w-[30em]">Dear {guest.name.split(/\s+/)[0]}, will you join us?</p>
         <div className="eyebrow mt-3">Kindly respond by {longDate(rsvpBy)}</div>
-        <p className="mx-auto mt-2 mb-0 max-w-[26em] font-ui text-[0.82rem] leading-snug text-ivory-dim italic">
-          Your response helps us properly plan for you as our most esteemed guest.
-        </p>
-        <RsvpForm guest={guest} onSubmit={save} />
+        <RsvpForm guest={guest} onSubmit={save} footnote="Your response helps us properly plan for you as our most esteemed guest." />
       </>
     );
 

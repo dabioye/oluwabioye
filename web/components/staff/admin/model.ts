@@ -46,6 +46,11 @@ export function sendHref(g: Guest) {
   return `https://wa.me/${waNumber(g.phone)}?text=${text}`;
 }
 
+/** The guest's WhatsApp chat with the invitation message ready, whatever their usual channel. */
+export function whatsAppHref(g: Guest) {
+  return g.phone ? `https://wa.me/${waNumber(g.phone)}?text=${encodeURIComponent(g.message)}` : '';
+}
+
 export const CHANNEL_LABEL = { whatsapp: 'WhatsApp', sms: 'SMS', email: 'Email', physical: 'Printed card' } as const;
 
 export function activityText(a: Activity) {

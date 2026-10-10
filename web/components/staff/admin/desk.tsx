@@ -19,7 +19,7 @@ import { GuestDialog } from './guest-dialog';
 import { ImportDialog } from './import-dialog';
 import { SendCardDialog } from './send-card-dialog';
 import { WhatsAppSendDialog } from './whatsapp-send-dialog';
-import { activityText, CHANNEL_LABEL, PILL, sendHref, type Stage, STAGES, stageOf, WA_TAG } from './model';
+import { activityText, CHANNEL_LABEL, PILL, sendHref, whatsAppHref, type Stage, STAGES, stageOf, WA_TAG } from './model';
 
 type Data = { guests: Guest[]; activity: Activity[]; church: ChurchRsvp[]; inviteUrl: string };
 
@@ -106,7 +106,7 @@ export function Desk() {
 
   /** WhatsApp on this device: the guest's chat opens with the message, then the card follows from the share sheet. */
   async function sendFromMyWhatsApp(g: Guest) {
-    window.open(sendHref(g), '_blank', 'noopener'); // open now, while the click still counts as the user's
+    window.open(whatsAppHref(g), '_blank', 'noopener'); // open now, while the click still counts as the user's
     if (cardSrc && getsCard(g)) {
       if (canShareImages()) setCardStep(g);
       else {
@@ -114,7 +114,7 @@ export function Desk() {
         toast.success('Card downloaded. Attach it in the WhatsApp chat that just opened.');
       }
     }
-    markSent(g, g.channel);
+    markSent(g, 'whatsapp');
   }
   useEffect(() => {
     const i = setInterval(() => !document.hidden && editing === undefined && !importing && !cardStep && !waSending && refresh(), 60_000);
@@ -445,14 +445,14 @@ function GuestRow({
           size="sm"
           variant="outline"
           className="border-gold/40 bg-transparent text-gold"
-          title={href && g.channel === 'whatsapp' ? 'Open WhatsApp on this device with the message, then send the card' : undefined}
+          title={g.phone ? 'Open WhatsApp on this device with the message, then send the card' : undefined}
           onClick={async () => {
-            if (href && g.channel === 'whatsapp') return onMessage();
+            if (g.phone) return onMessage();
             await copy(g.message, 'Message copied. Paste it into WhatsApp or SMS.');
             if (!g.sentAt) onSent(g, 'copied');
           }}
         >
-          {href && g.channel === 'whatsapp' ? <MessageCircle /> : <Copy />} Message
+          {g.phone ? <MessageCircle /> : <Copy />} Message
         </Button>
         <Button size="sm" variant="outline" className="border-gold/40 bg-transparent text-gold" onClick={() => copy(g.link, 'Invitation link copied')}>
           <Link2 /> Link

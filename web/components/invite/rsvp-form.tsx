@@ -15,10 +15,13 @@ export function RsvpForm({
   guest,
   onSubmit,
   onCancel,
+  footnote,
 }: {
   guest: InviteGuest;
   onSubmit: (r: 'yes' | 'no', note: string) => Promise<void>;
   onCancel?: () => void;
+  /** A short line under the note box. */
+  footnote?: string;
 }) {
   const [note, setNote] = useState(guest.rsvpNote || '');
   const [busy, setBusy] = useState<'yes' | 'no' | null>(null);
@@ -87,6 +90,7 @@ export function RsvpForm({
         aria-describedby={error ? 'rsvp-error' : undefined}
         className="bg-navy-2 font-body text-lg"
       />
+      {footnote && <p className="mt-3 mb-0 text-center font-ui text-[0.82rem] leading-snug text-ivory-dim italic">{footnote}</p>}
       {onCancel && (
         <div className="mt-3 text-center">
           <Button type="button" variant="ghost" onClick={onCancel} className="ui-caps h-10 text-[0.72rem]">
