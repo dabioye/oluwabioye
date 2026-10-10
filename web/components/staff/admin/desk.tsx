@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, Download, ImageDown, Link2, Plus, Send, Trash2, Upload } from 'lucide-react';
+import { Copy, Download, ImageDown, Link2, MessageCircle, Plus, Send, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -101,6 +101,11 @@ export function Desk() {
    */
   async function sendWithCard(g: Guest) {
     if (viaApi(g)) return setWaSending([g]);
+    return sendFromMyWhatsApp(g);
+  }
+
+  /** WhatsApp on this device: the guest's chat opens with the message, then the card follows from the share sheet. */
+  async function sendFromMyWhatsApp(g: Guest) {
     window.open(sendHref(g), '_blank', 'noopener'); // open now, while the click still counts as the user's
     if (cardSrc && getsCard(g)) {
       if (canShareImages()) setCardStep(g);
@@ -319,6 +324,7 @@ export function Desk() {
                     onSent={markSent}
                     onDelivered={toggleDelivered}
                     onSendWhatsApp={() => sendWithCard(g)}
+                    onMessage={() => sendFromMyWhatsApp(g)}
                     viaApi={viaApi(g)}
                     onCard={cardSrc && getsCard(g) ? () => saveCard(g) : undefined}
                   />
@@ -367,6 +373,7 @@ function GuestRow({
   onSent,
   onDelivered,
   onSendWhatsApp,
+  onMessage,
   viaApi,
   onCard,
 }: {
@@ -375,6 +382,8 @@ function GuestRow({
   onSent: (g: Guest, via: string) => void;
   onDelivered: (g: Guest) => void;
   onSendWhatsApp: () => void;
+  /** Send from WhatsApp on this device (message, then card) instead of WhatsApp Business. */
+  onMessage: () => void;
   viaApi: boolean;
   onCard?: () => void;
 }) {
@@ -436,12 +445,14 @@ function GuestRow({
           size="sm"
           variant="outline"
           className="border-gold/40 bg-transparent text-gold"
+          title={href && g.channel === 'whatsapp' ? 'Open WhatsApp on this device with the message, then send the card' : undefined}
           onClick={async () => {
+            if (href && g.channel === 'whatsapp') return onMessage();
             await copy(g.message, 'Message copied. Paste it into WhatsApp or SMS.');
             if (!g.sentAt) onSent(g, 'copied');
           }}
         >
-          <Copy /> Message
+          {href && g.channel === 'whatsapp' ? <MessageCircle /> : <Copy />} Message
         </Button>
         <Button size="sm" variant="outline" className="border-gold/40 bg-transparent text-gold" onClick={() => copy(g.link, 'Invitation link copied')}>
           <Link2 /> Link

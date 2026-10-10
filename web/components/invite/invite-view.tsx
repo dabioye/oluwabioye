@@ -89,6 +89,24 @@ export function InviteView() {
             <h1 className="sr-only">
               {c.bride} and {c.groom} invite {guest.name} to The Making of {c.surname}
             </h1>
+
+            {/* The RSVP comes first: it's what a guest opening the seal needs to do. */}
+            <Frame id="respond" className="mt-[clamp(12px,3vw,24px)] scroll-mt-16">
+              <h2 className="display mb-3 text-[clamp(1.25rem,3.6vw,1.6rem)] tracking-[0.18em] uppercase">
+                {guest.rsvp === 'pending' ? 'Send RSVP' : 'Your RSVP'}
+              </h2>
+              <RsvpBlock
+                guest={guest}
+                qrSvg={data.qrSvg}
+                rsvpBy={data.invite.rsvpBy}
+                onSaved={(g) => {
+                  updateGuest(g);
+                  toast.success(g.rsvp === 'yes' ? 'Thank you! Your access card is ready below.' : 'Thank you for letting us know.');
+                  if (g.rsvp === 'yes') setTimeout(() => document.getElementById('card')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
+                }}
+              />
+            </Frame>
+
             <section id="invitation" className="scroll-mt-4 pt-[clamp(16px,4vw,32px)] text-center">
               <InvitationArt
                 src={data.invite.art}
@@ -129,22 +147,6 @@ export function InviteView() {
               </EventDetails>
             )}
 
-            <Frame id="respond" className="scroll-mt-16">
-              <h2 className="display mb-3 text-[clamp(1.25rem,3.6vw,1.6rem)] tracking-[0.18em] uppercase">
-                {guest.rsvp === 'pending' ? 'Send RSVP' : 'Your RSVP'}
-              </h2>
-              <RsvpBlock
-                guest={guest}
-                qrSvg={data.qrSvg}
-                rsvpBy={data.invite.rsvpBy}
-                onSaved={(g) => {
-                  updateGuest(g);
-                  toast.success(g.rsvp === 'yes' ? 'Thank you! Your access card is ready below.' : 'Thank you for letting us know.');
-                  if (g.rsvp === 'yes') setTimeout(() => document.getElementById('card')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
-                }}
-              />
-            </Frame>
-
             <p className="text-center">
               <a href={data.publicUrl} className="ui-caps text-[0.74rem] no-underline hover:underline">
                 Visit our wedding website
@@ -182,6 +184,9 @@ function RsvpBlock({ guest, qrSvg, rsvpBy, onSaved }: { guest: InviteGuest; qrSv
       <>
         <p className="lede mx-auto mt-1 max-w-[30em]">Dear {guest.name.split(/\s+/)[0]}, will you join us?</p>
         <div className="eyebrow mt-3">Kindly respond by {longDate(rsvpBy)}</div>
+        <p className="mx-auto mt-2 mb-0 max-w-[26em] font-ui text-[0.82rem] leading-snug text-ivory-dim italic">
+          Your response helps us properly plan for you as our most esteemed guest.
+        </p>
         <RsvpForm guest={guest} onSubmit={save} />
       </>
     );
