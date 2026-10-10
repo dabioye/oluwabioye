@@ -26,9 +26,11 @@ function Gate() {
   const [result, setResult] = useState<GateResult | null>(null);
   const [q, setQ] = useState('');
   const [matches, setMatches] = useState<Match[]>([]);
-  const [camOn, setCamOn] = useState(false);
+  const [cam, setCam] = useState<'off' | 'starting' | 'on'>('off');
+  const camOn = cam !== 'off';
   const scanner = useRef<Scanner | null>(null);
   const busy = useRef(false);
+  const clearResult = useRef<ReturnType<typeof setTimeout>>(undefined);
   const last = useRef({ code: '', at: 0 });
 
   const loadStats = useCallback(
@@ -53,6 +55,11 @@ function Gate() {
         const r = await api<GateResult>('/api/checkin', { body: { code, undo } });
         setResult(r);
         navigator.vibrate?.(r.status === 'ok' ? 80 : [60, 60, 60]);
+        // While scanning, a welcome clears itself so the next guest can be scanned; warnings stay until dealt with.
+        if (scanner.current && r.status === 'ok') {
+          clearTimeout(clearResult.current);
+          clearResult.current = setTimeout(() => setResult((cur) => (cur === r ? null : cur)), 6000);
+        }
         loadStats();
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) location.reload();
@@ -84,23 +91,40 @@ function Gate() {
       await scanner.current.stop().catch(() => {});
       scanner.current.clear();
       scanner.current = null;
-      setCamOn(false);
+      setCam('off');
       return;
     }
+    // Show the viewfinder before starting: the scanner sizes the video to it, so it must already be on screen.
+    setCam('starting');
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     const { Html5Qrcode } = await import('html5-qrcode');
     const s = new Html5Qrcode('reader') as unknown as Scanner;
     try {
-      await s.start({ facingMode: 'environment' }, { fps: 10, qrbox: 240 }, (text: string) => {
-        const now = Date.now();
-        // Ignore the same card held in front of the lens.
-        if (text === last.current.code && now - last.current.at < 4000) return;
-        last.current = { code: text, at: now };
-        check(text);
-      });
+      await s.start(
+        { facingMode: 'environment' },
+        {
+          fps: 12,
+          aspectRatio: 1,
+          // The square to hold the code in: most of the view, so a card a hand's length away fits.
+          qrbox: (w: number, h: number) => {
+            const side = Math.floor(Math.min(w, h) * 0.72);
+            return { width: side, height: side };
+          },
+        },
+        (text: string) => {
+          const now = Date.now();
+          // Ignore the same card held in front of the lens.
+          if (text === last.current.code && now - last.current.at < 4000) return;
+          last.current = { code: text, at: now };
+          check(text); // checks the guest in straight away
+        },
+      );
       scanner.current = s;
-      setCamOn(true);
+      setCam('on');
     } catch (err) {
-      alert(`Camera unavailable: ${err}. Type the code instead.`);
+      s.clear?.();
+      setCam('off');
+      alert(`Camera unavailable: ${err}. Allow camera access for this site, or type the code instead.`);
     }
   }
 
@@ -111,7 +135,16 @@ function Gate() {
       <StaffHeader title="Gate check-in" subtitle={stats ? `${stats.checkedIn} arrived of ${stats.expected} expected` : 'Loading…'} />
       <Card className="mt-4 border-hairline-soft bg-navy-2/60">
         <CardContent className="grid gap-3">
-          <div id="reader" className="overflow-hidden rounded-md bg-black/30 empty:hidden [&_video]:rounded-md" />
+          <div className={camOn ? 'grid gap-2' : 'hidden'}>
+            <div
+              id="reader"
+              aria-label="Camera viewfinder"
+              className="relative aspect-square w-full overflow-hidden rounded-md bg-black [&_video]:!h-full [&_video]:!w-full [&_video]:object-cover"
+            />
+            <p className="m-0 text-center font-ui text-[0.82rem] text-ivory-dim">
+              {cam === 'starting' ? 'Starting the camera…' : 'Hold the QR code inside the square. Guests are checked in as soon as it reads.'}
+            </p>
+          </div>
           <Button size="lg" onClick={toggleCamera} className="h-12">
             {camOn ? <CameraOff /> : <Camera />} {camOn ? 'Stop camera' : 'Scan access card'}
           </Button>
