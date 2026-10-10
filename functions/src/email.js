@@ -84,4 +84,60 @@ async function sendInvite(g, { text, link, card }) {
 /** Guests who gave an email and haven't been emailed their invitation yet. */
 const eligible = (g) => valid(g.email) && !g.emailSentAt && g.rsvp !== 'no';
 
-module.exports = { configured, from, sendInvite, eligible, compose, _sent: sent };
+// ---------- event-site enquiries ----------
+const leadTo = () => env('LEADS_TO') || env('MAIL_REPLY_TO') || env('SMTP_USER');
+
+/** Email a new enquiry to the team (replies go to the enquirer), and a short thank-you to the enquirer. */
+async function sendLead(l, eventName) {
+  if (!configured()) return { ok: false, error: 'Email isn’t set up yet (SMTP settings).' };
+  const rows = [
+    ['Name', l.name],
+    ['Email', l.email],
+    ['Phone / WhatsApp', l.phone],
+    ['Best way to reach them', l.contactBy],
+    ['Event', eventName],
+    ['Date', l.date],
+    ['Location', l.location],
+    ['Expected guests', l.guests || ''],
+    ['Wants', l.features.join(', ')],
+    ['Budget', l.budget],
+    ['About the event', l.details],
+    ['Found us on', l.from],
+  ].filter(([, v]) => v);
+  const text = rows.map(([k, v]) => `${k}: ${v}`).join('\n');
+  const html = `<table cellpadding="6" style="font-family:Arial,sans-serif;font-size:14px;border-collapse:collapse">${rows
+    .map(([k, v]) => `<tr><td style="color:#666;vertical-align:top;white-space:nowrap">${esc(k)}</td><td style="white-space:pre-wrap">${esc(v)}</td></tr>`)
+    .join('')}</table>`;
+  try {
+    await record(
+      mailer().sendMail({
+        from: from(),
+        to: leadTo(),
+        replyTo: l.email ? `${l.name.replace(/[<>",]/g, '')} <${l.email}>` : undefined,
+        subject: `New event site enquiry: ${eventName} · ${l.name}`,
+        text,
+        html,
+      }),
+    );
+    if (l.email)
+      await record(
+        mailer().sendMail({
+          from: from(),
+          to: `${l.name.replace(/[<>",]/g, '')} <${l.email}>`,
+          replyTo: leadTo(),
+          subject: 'Thank you, we’ve received your event site enquiry',
+          text: `Dear ${l.name},\n\nThank you for telling us about your ${eventName.toLowerCase()}. We’ll be in touch shortly to talk about your event site.\n\nWhat you sent us:\n${text}`,
+        }),
+      ).catch((e) => console.error('Enquiry thank-you failed:', e.message));
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e).slice(0, 300) };
+  }
+}
+async function record(p) {
+  const info = await p;
+  if (env('SMTP_HOST') === 'json') sent.push(JSON.parse(info.message));
+  return info;
+}
+
+module.exports = { configured, from, sendInvite, eligible, compose, sendLead, leadTo, _sent: sent };

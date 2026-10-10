@@ -63,9 +63,14 @@ export function SiteFooter({ children }: { children?: React.ReactNode }) {
           {cfg.couple.bride} &amp; {cfg.couple.groom} · {longDate(cfg.date)}
         </>
       )}
-      <a href="/privacy" className="mt-2 block text-[0.72rem] text-ivory-dim/80 no-underline hover:text-gold">
-        Privacy policy
-      </a>
+      <nav aria-label="About this site" className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-[0.72rem]">
+        <a href="/privacy" className="text-ivory-dim/80 no-underline hover:text-gold">
+          Privacy policy
+        </a>
+        <a href="/create-your-event-site" className="text-gold/90 no-underline hover:text-gold">
+          Let Us Create Your Own Event Site
+        </a>
+      </nav>
     </footer>
   );
 }

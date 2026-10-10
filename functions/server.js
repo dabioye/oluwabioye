@@ -13,6 +13,7 @@ const { weekday, longDate } = require('./src/dates');
 const { parseCsv, toCsv } = require('./src/csv');
 const whatsapp = require('./src/whatsapp');
 const email = require('./src/email');
+const leads = require('./src/leads');
 
 const PORT = process.env.PORT || 3000;
 const env = (k) => process.env[k] || '';
@@ -216,6 +217,19 @@ app.post('/api/invite/:code/rsvp', limit(20, 60_000), wrap(async (req, res) => {
   res.json({ guest: inviteGuest(updated) });
 }));
 
+// ---------- "Let us create your own event site" enquiries ----------
+// Saved first (so none are lost if email fails), then emailed to the team.
+app.post('/api/leads', limit(5, 10 * 60e3), wrap(async (req, res) => {
+  if (req.body.website) return res.json({ ok: true }); // bot trap
+  const { lead, error } = leads.clean(req.body);
+  if (error) return res.status(400).json({ error });
+  const saved = await store.addLead(lead);
+  const mail = await email.sendLead(saved, leads.eventName(saved));
+  if (!mail.ok) console.error('Enquiry email failed:', mail.error);
+  await store.logActivity('lead', { id: null, name: saved.name }, leads.eventName(saved));
+  res.json({ ok: true });
+}));
+
 // ---------- staff sign-in ----------
 app.get('/api/session', (req, res) => res.json({ role: roleOf(req) }));
 // Sign-in attempts per minute per visitor (raised only by the browser tests, which sign in often).
@@ -365,6 +379,7 @@ api.post('/whatsapp/send-pending', wrap(async (req, res) => {
 }));
 // Email: whether it is set up, and sending one guest their invitation by email.
 api.get('/email', (req, res) => res.json({ configured: email.configured(), from: email.configured() ? email.from() : '' }));
+api.get('/leads', wrap(async (req, res) => res.json({ leads: await store.leads(), sentTo: email.configured() ? email.leadTo() : '' })));
 api.post('/guests/:id/email', wrap(async (req, res) => {
   const g = await guestOr404(req, res); if (!g) return;
   const r = await emailInvite(g);

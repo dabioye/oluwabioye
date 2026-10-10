@@ -379,6 +379,37 @@ const store = require('../src/store');
   assert.equal(r.status, 400);
   assert.match((await r.json()).error, /no valid email/);
   assert.equal((await req(`/api/admin/guests/${ngozi.id}/email`, json('POST', {}, gate))).status, 401);
+
+  // ---------- "Let us create your own event site" enquiries ----------
+  r = await req('/api/leads', json('POST', { name: '', email: 'x@y.test', event: 'Wedding' }));
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).error, /your name/);
+  r = await req('/api/leads', json('POST', { name: 'Kunle', event: 'Birthday' }));
+  assert.match((await r.json()).error, /email address or phone/);
+  r = await req('/api/leads', json('POST', { name: 'Kunle', phone: '0803', event: 'Other' }));
+  assert.match((await r.json()).error, /what kind of event/);
+  const sentBefore = mail._sent.length;
+  process.env.LEADS_TO = 'hello@x.test';
+  r = await req('/api/leads', json('POST', {
+    name: 'Kunle Bakare', email: 'kunle@x.test', phone: '0803 000 1111', event: 'Other', otherEvent: '50th anniversary',
+    date: '2027-03-14', location: 'Ibadan', guests: '180', features: ['RSVP and guest list', 'Not a feature'], budget: 'Flexible',
+    details: 'A surprise for my parents.', contactBy: 'WhatsApp', from: 'sarahanddamilare.dabioye.com',
+  }));
+  assert.deepEqual(await r.json(), { ok: true });
+  const [toTeam, toKunle] = mail._sent.slice(sentBefore);
+  assert.deepEqual([toTeam.to[0].address, toTeam.replyTo[0].address, toTeam.subject], ['hello@x.test', 'kunle@x.test', 'New event site enquiry: 50th anniversary · Kunle Bakare']);
+  assert(toTeam.text.includes('Expected guests: 180') && toTeam.text.includes('Wants: RSVP and guest list') && !toTeam.text.includes('Not a feature'));
+  assert.equal(toKunle.to[0].address, 'kunle@x.test');
+  assert.match(toKunle.text, /your 50th anniversary/);
+  r = await req('/api/admin/leads', { headers: { cookie: admin } });
+  const ls = await r.json();
+  assert.equal(ls.sentTo, 'hello@x.test');
+  assert.deepEqual([ls.leads[0].name, ls.leads[0].event, ls.leads[0].otherEvent, ls.leads[0].guests], ['Kunle Bakare', 'Other', '50th anniversary', 180]);
+  assert.equal((await req('/api/admin/leads')).status, 401, 'enquiries are private');
+  // The bot trap: accepted quietly, nothing saved or sent
+  r = await req('/api/leads', json('POST', { name: 'Bot', email: 'b@x.test', event: 'Wedding', website: 'spam.example' }));
+  assert.deepEqual(await r.json(), { ok: true });
+  assert.equal((await (await req('/api/admin/leads', { headers: { cookie: admin } })).json()).leads.length, 1);
   assert.equal((await req(`/api/admin/guests/${g.id}/whatsapp`, { method: 'POST', headers: { cookie: gate } })).status, 401);
   await req('/api/admin/site', json('PUT', { waAutoSend: false }, admin));
 

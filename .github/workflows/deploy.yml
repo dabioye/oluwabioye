@@ -86,6 +86,7 @@ jobs:
           echo "SMTP_USER=${{ vars.SMTP_USER || 'none' }}" >> functions/.env
           echo "MAIL_FROM=${{ vars.MAIL_FROM || 'none' }}" >> functions/.env
           echo "MAIL_REPLY_TO=${{ vars.MAIL_REPLY_TO || 'none' }}" >> functions/.env
+          echo "LEADS_TO=${{ vars.LEADS_TO || 'none' }}" >> functions/.env
       - name: Deploy
         if: env.SA != ''
         run: |

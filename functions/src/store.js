@@ -137,6 +137,13 @@ function jsonBackend() {
 
     async getSettings() { return JSON.parse(JSON.stringify(state.settings || {})); },
     async saveSettings(obj) { state.settings = obj; await persist(); },
+    async addLead(lead) {
+      const l = { id: crypto.randomUUID(), at: now(), ...lead };
+      (state.leads ||= []).unshift(l);
+      await persist();
+      return l;
+    },
+    async leads() { return (state.leads || []).map((l) => ({ ...l })); },
     async logActivity(type, g, extra) { log(type, g, extra); await persist(); },
     // WhatsApp conversations: one record per message, in or out, grouped by thread (a guest id, or p:<number>).
     async addMessage(m) {
@@ -287,6 +294,12 @@ function firestoreBackend() {
     // Site content edited in /admin/site
     async getSettings() { return data(await db.collection('settings').doc('site').get()) || {}; },
     async saveSettings(obj) { await db.collection('settings').doc('site').set(obj); },
+    async addLead(lead) {
+      const l = { id: crypto.randomUUID(), at: now(), ...lead };
+      await db.collection('leads').doc(l.id).set(l);
+      return l;
+    },
+    async leads() { return (await db.collection('leads').orderBy('at', 'desc').get()).docs.map((d) => d.data()); },
     async logActivity(type, g, extra) { await log(type, g, extra); },
     // WhatsApp conversations (sorted in memory, so no composite indexes are needed). WhatsApp ids can
     // contain "/", which a document id can't, so documents are keyed by a hash of the id.
