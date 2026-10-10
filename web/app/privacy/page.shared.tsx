@@ -6,7 +6,7 @@ import { cfg } from '@/lib/config';
 import { longDate } from '@/lib/format';
 
 const c = cfg.couple;
-const UPDATED = '9 October 2026';
+const UPDATED = '10 October 2026';
 
 export const metadata: Metadata = {
   title: `Privacy policy · ${c.bride} & ${c.groom}`,
@@ -80,6 +80,13 @@ export default function Privacy() {
               tools.
             </li>
           </ul>
+        </Section>
+
+        <Section title="If you ask us to build your event site">
+          <p className="m-0">
+            The <b>Let Us Create Your Own Event Site</b> form sends us your name, contact details and what you tell us about your event, by email. We keep it
+            only to reply to you and discuss your site, and delete it on request.
+          </p>
         </Section>
 
         <Section title="Who handles it for us">

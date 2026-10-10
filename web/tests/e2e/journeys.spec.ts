@@ -358,6 +358,31 @@ test('guests’ WhatsApp replies arrive in the inbox, alert the couple, and can 
   expect(browserErrors).toEqual([]);
 });
 
+test('anyone can ask us to create their own event site from the footer', async ({ page }) => {
+  await page.goto(`${PUBLIC}/our-story`);
+  await page.getByRole('contentinfo').getByRole('link', { name: 'Let Us Create Your Own Event Site' }).click();
+  await expect(page).toHaveURL(`${PUBLIC}/create-your-event-site`);
+  await expect(page.getByRole('heading', { name: 'Your celebration, beautifully online' })).toBeVisible();
+  // Choosing "Other" asks what the event is; a missing contact is explained.
+  await page.getByRole('radio', { name: 'Other (tell us)' }).click();
+  await page.getByLabel('What’s the event?').fill('Naming ceremony');
+  await page.getByLabel('Your name').fill('Amaka Obi');
+  await page.getByRole('button', { name: 'Send enquiry' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'email address or phone number' })).toBeVisible();
+  await page.getByLabel('Phone / WhatsApp').fill('0802 222 3333');
+  await page.getByLabel('Expected guests').fill('120');
+  await page.getByRole('checkbox', { name: 'RSVP and guest list' }).click();
+  await page.getByLabel('Tell us about your event').fill('For our baby girl.');
+  await page.getByRole('button', { name: 'Send enquiry' }).click();
+  await expect(page.getByRole('heading', { name: 'Thank you, Amaka' })).toBeVisible();
+  // It reaches the team: saved, and listed for the couple.
+  const leads = await (await page.request.get(`${PUBLIC}/api/admin/leads`)).status();
+  expect(leads).toBe(401);
+  await page.request.post(`${PUBLIC}/api/login`, { data: { kind: 'admin', password: 'test-admin' } });
+  const list = await (await page.request.get(`${PUBLIC}/api/admin/leads`)).json();
+  expect(list.leads[0]).toMatchObject({ name: 'Amaka Obi', event: 'Other', otherEvent: 'Naming ceremony', guests: 120, features: ['RSVP and guest list'] });
+});
+
 test('the gate camera shows a viewfinder and checks a guest in as soon as their card reads', async ({ request }, info) => {
   test.setTimeout(90_000); // starts its own browser with a fake camera
   const g = await addGuest(request, { name: 'Femi Lawal', phone: '08044444444' });
