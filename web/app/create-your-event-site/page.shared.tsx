@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { EnquiryForm } from '@/components/enquiry/enquiry-form';
 import { Monogram } from '@/components/wedding/monogram';
 import { Rule } from '@/components/wedding/ornaments';
-import { SiteFooter } from '@/components/wedding/site-chrome';
+import { SOLUTIONS_CELEBRATION_URL, SiteFooter } from '@/components/wedding/site-chrome';
 
 export const metadata: Metadata = {
   title: 'Let us create your own event site',
@@ -21,6 +21,9 @@ export default function CreateYourEventSite() {
           <p className="lede mx-auto mt-3 max-w-[32em]">
             Liked this website? We create sites like it for weddings, birthdays, burials, baby showers and every kind of gathering: personalised invitations,
             RSVPs, WhatsApp and email invites, access cards and gate check-in. Tell us about your event and we’ll get back to you.
+          </p>
+          <p className="mt-3 font-ui text-[0.8rem] tracking-[0.06em] text-ivory-dim">
+            Your Celebration is made by <a href={SOLUTIONS_CELEBRATION_URL}>Dabioye Solutions</a>.
           </p>
         </header>
         <EnquiryForm />
