@@ -55,6 +55,9 @@ export function Dock({ items }: { items: (DockItem | false | null | undefined)[]
   );
 }
 
+/** Your Celebration, the event-site product this site showcases, on the Dabioye Solutions website. */
+export const SOLUTIONS_CELEBRATION_URL = 'https://solutions.dabioye.com/#celebration';
+
 export function SiteFooter({ children }: { children?: React.ReactNode }) {
   return (
     <footer className="px-4 pt-8 pb-12 text-center font-ui text-[0.8rem] tracking-[0.1em] text-ivory-dim">
@@ -69,6 +72,9 @@ export function SiteFooter({ children }: { children?: React.ReactNode }) {
         </a>
         <a href="/create-your-event-site" className="text-gold/90 no-underline hover:text-gold">
           Let Us Create Your Own Event Site
+        </a>
+        <a href={SOLUTIONS_CELEBRATION_URL} className="text-ivory-dim/80 no-underline hover:text-gold">
+          Site by Dabioye Solutions
         </a>
       </nav>
     </footer>
