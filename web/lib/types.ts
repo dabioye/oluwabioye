@@ -136,7 +136,24 @@ export type SiteSettings = {
   inviteUrl?: string;
 };
 
-export type Role = 'admin' | 'checkin' | null;
+/** 'couple' is an admin session with the private budget unlocked. */
+export type Role = 'admin' | 'couple' | 'checkin' | null;
+
+/** One line of the private wedding budget (whole naira). */
+export type BudgetItem = {
+  id: string;
+  category: string;
+  item: string;
+  vendor: string;
+  estimate: number;
+  actual: number;
+  paid: number;
+  due: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+export type BudgetData = { settings: { total: number }; items: BudgetItem[]; categories: string[] };
 
 /** WhatsApp conversations (GET /api/admin/inbox and /api/admin/inbox/:thread). */
 export type InboxMessage = {

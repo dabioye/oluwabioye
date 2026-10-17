@@ -45,7 +45,10 @@ function parseCsv(text) {
 const COLS = ['name', 'code', 'phone', 'email', 'side', 'group', 'events', 'driverCard', 'channel', 'table', 'sentAt', 'openedAt', 'openCount', 'rsvp', 'rsvpAt', 'rsvpNote', 'cardDelivered', 'checkedInAt', 'notes', 'link'];
 function toCsv(items, cols = COLS) {
   const q = (v) => {
-    const s = v === null || v === undefined ? '' : String(v);
+    let s = v === null || v === undefined ? '' : String(v);
+    // A cell starting with = + - @ would run as a formula in Excel; a leading apostrophe keeps it text.
+    // Plain numbers and phone numbers (+234 803…, -500) are left as they are.
+    if (/^[=@\t\r]/.test(s) || (/^[+-]/.test(s) && !/^[+-][\d\s().-]*$/.test(s))) s = `'${s}`;
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return '﻿' + [cols.join(','), ...items.map((it) => cols.map((c) => q(it[c])).join(','))].join('\r\n');

@@ -144,6 +144,24 @@ function jsonBackend() {
       return l;
     },
     async leads() { return (state.leads || []).map((l) => ({ ...l })); },
+    // Private records kept by name (e.g. the budget passcode), and the budget's lines.
+    async getDoc(name) { return JSON.parse(JSON.stringify((state.docs || {})[name] || null)); },
+    async setDoc(name, obj) { (state.docs ||= {})[name] = obj; await persist(); },
+    async budgetItems() { return (state.budget || []).map((b) => ({ ...b })); },
+    async saveBudgetItem(item) {
+      state.budget ||= [];
+      const i = state.budget.findIndex((b) => b.id === item.id);
+      if (i < 0) state.budget.push({ ...item });
+      else state.budget[i] = { ...item };
+      await persist();
+      return { ...item };
+    },
+    async removeBudgetItem(id) {
+      const before = (state.budget || []).length;
+      state.budget = (state.budget || []).filter((b) => b.id !== id);
+      await persist();
+      return state.budget.length < before;
+    },
     async logActivity(type, g, extra) { log(type, g, extra); await persist(); },
     // WhatsApp conversations: one record per message, in or out, grouped by thread (a guest id, or p:<number>).
     async addMessage(m) {
@@ -294,6 +312,16 @@ function firestoreBackend() {
     // Site content edited in /admin/site
     async getSettings() { return data(await db.collection('settings').doc('site').get()) || {}; },
     async saveSettings(obj) { await db.collection('settings').doc('site').set(obj); },
+    async getDoc(name) { return data(await db.collection('private').doc(String(name)).get()); },
+    async setDoc(name, obj) { await db.collection('private').doc(String(name)).set(obj); },
+    async budgetItems() { return (await db.collection('budget').get()).docs.map((d) => d.data()); },
+    async saveBudgetItem(item) { await db.collection('budget').doc(item.id).set(item); return item; },
+    async removeBudgetItem(id) {
+      const ref = db.collection('budget').doc(String(id));
+      if (!(await ref.get()).exists) return false;
+      await ref.delete();
+      return true;
+    },
     async addLead(lead) {
       const l = { id: crypto.randomUUID(), at: now(), ...lead };
       await db.collection('leads').doc(l.id).set(l);

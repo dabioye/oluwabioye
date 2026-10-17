@@ -183,6 +183,15 @@ Meta app → WhatsApp → Configuration → Webhook:
 
 A new WhatsApp Business account can message about 250 people a day, which covers the whole guest list.
 
+## Private budget (`/admin/budget`)
+
+The budget and expenses page is for the two of you only. It needs the admin password **and** a separate budget passcode, so the planning team can use the invitation desk without seeing it.
+
+- The first time either of you opens **Budget** (top of the invitation desk), choose the passcode (6+ characters). Only a scrypt hash of it is stored.
+- Once unlocked it stays open on that device for a day. **Lock** closes it at once; everything else keeps working.
+- Each line has a category, vendor, estimate, agreed price, amount paid and the date the balance is due. The page totals what is expected, paid and still owed against your overall budget, shows each category, and lists the payments coming up. **Export** downloads a CSV for Excel or Sheets.
+- Forgot the passcode? Delete the document `private/budget-lock` in the Firebase console (Firestore). The budget is kept, and the next visit asks you to choose a new passcode.
+
 ## Email invitations
 
 Guests with an email address can get their invitation by email: their personalised card, the invitation message and a **View your invitation & RSVP** button.
