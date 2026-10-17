@@ -6,6 +6,6 @@ import { useSession } from '../session';
 export function AdminGate({ children }: { children: React.ReactNode }) {
   const { role, setRole } = useSession();
   if (role === undefined) return <Checking />;
-  if (role !== 'admin') return <StaffLogin kind="admin" onSignedIn={setRole} />;
+  if (role !== 'admin' && role !== 'couple') return <StaffLogin kind="admin" onSignedIn={setRole} />;
   return <>{children}</>;
 }

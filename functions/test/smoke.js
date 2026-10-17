@@ -413,6 +413,70 @@ const store = require('../src/store');
   assert.equal((await req(`/api/admin/guests/${g.id}/whatsapp`, { method: 'POST', headers: { cookie: gate } })).status, 401);
   await req('/api/admin/site', json('PUT', { waAutoSend: false }, admin));
 
+  // ---------- private budget: admin password, then the couple's own passcode ----------
+  const cookieOf = (res) => (res.headers.get('set-cookie') || '').split(';')[0];
+  assert.equal((await req('/api/budget/status')).status, 401, 'not for visitors');
+  assert.equal((await req('/api/budget/status', { headers: { cookie: gate } })).status, 401, 'not for ushers');
+  assert.deepEqual(await (await req('/api/budget/status', { headers: { cookie: admin } })).json(), { passcodeSet: false, unlocked: false });
+  assert.equal((await req('/api/budget', { headers: { cookie: admin } })).status, 403, 'the planning team’s admin session can’t read it');
+  r = await req('/api/budget/passcode', json('POST', { passcode: '123' }, admin));
+  assert.equal(r.status, 400, 'too short');
+  r = await req('/api/budget/passcode', json('POST', { passcode: 'our-secret-2026' }, admin));
+  assert.equal(r.status, 200);
+  let couple = cookieOf(r);
+  assert.deepEqual(await (await req('/api/session', { headers: { cookie: couple } })).json(), { role: 'couple' });
+  assert.equal((await req('/api/admin/guests', { headers: { cookie: couple } })).status, 200, 'still works as an admin session');
+  assert.equal((await req('/api/budget/passcode', json('POST', { passcode: 'hijacked-1' }, admin))).status, 403, 'a set passcode can’t be replaced without unlocking');
+  assert.equal(JSON.stringify(await store.getDoc('budget-lock')).includes('our-secret'), false, 'only a hash is stored');
+
+  r = await req('/api/budget/settings', json('PUT', { total: '₦12,500,000' }, couple));
+  assert.deepEqual(await r.json(), { total: 12500000 });
+  r = await req('/api/budget/items', json('POST', { category: 'Venue', item: 'SCFN hall', vendor: 'Sickle Cell Foundation', estimate: '1,500,000', actual: 1400000, paid: 700000, due: '2026-11-30' }, couple));
+  const hall = await r.json();
+  assert.equal(r.status, 200, JSON.stringify(hall));
+  assert.deepEqual([hall.estimate, hall.actual, hall.paid, hall.due], [1500000, 1400000, 700000, '2026-11-30']);
+  assert.equal((await req('/api/budget/items', json('POST', { category: 'Cake', item: '' }, couple))).status, 400, 'a line needs a name');
+  await req('/api/budget/items', json('POST', { category: 'Cake', item: '=HYPERLINK("x")', estimate: -5, due: 'soon' }, couple));
+  r = await req(`/api/budget/items/${hall.id}`, json('PATCH', { paid: 1400000 }, couple));
+  assert.deepEqual([(await r.json()).paid, hall.item], [1400000, 'SCFN hall'], 'patch keeps the other fields');
+  r = await req('/api/budget', { headers: { cookie: couple } });
+  const b = await r.json();
+  assert.deepEqual(b.items.map((i) => [i.category, i.item, i.estimate, i.due]), [['Cake', '=HYPERLINK("x")', 5, ''], ['Venue', 'SCFN hall', 1500000, '2026-11-30']]);
+  assert(b.categories.includes('Catering'));
+  r = await req('/api/budget/export.csv', { headers: { cookie: couple } });
+  const csv = await r.text();
+  assert(csv.includes(`'=HYPERLINK`), 'no formulas in the export');
+  assert(csv.includes('Venue,SCFN hall,Sickle Cell Foundation,1500000,1400000,1400000,2026-11-30'));
+  assert.equal((await req(`/api/budget/items/${hall.id}`, { method: 'DELETE', headers: { cookie: couple } })).status, 200);
+  assert.equal((await (await req('/api/budget', { headers: { cookie: couple } })).json()).items.length, 1);
+  // Funds received: who from, promised and received
+  assert.equal((await req('/api/budget/funds', json('POST', { source: 'Family', from: '' }, couple))).status, 400, 'a fund needs a source');
+  r = await req('/api/budget/funds', json('POST', { source: 'Family', from: 'Mum & Dad', pledged: '₦3,000,000', received: '1,000,000', date: '2026-09-01' }, couple));
+  const parents = await r.json();
+  assert.deepEqual([parents.pledged, parents.received, parents.date], [3000000, 1000000, '2026-09-01']);
+  await req('/api/budget/funds', json('POST', { source: 'Our savings', from: 'Joint account', received: 5000000, date: '2026-10-01' }, couple));
+  r = await req(`/api/budget/funds/${parents.id}`, json('PATCH', { received: 2000000 }, couple));
+  assert.deepEqual([(await r.json()).received, parents.pledged], [2000000, 3000000], 'patch keeps the pledge');
+  const withFunds = await (await req('/api/budget', { headers: { cookie: couple } })).json();
+  assert.deepEqual(withFunds.funds.map((f) => f.from), ['Joint account', 'Mum & Dad'], 'newest first');
+  assert(withFunds.sources.includes('Family'));
+  r = await req('/api/budget/funds.csv', { headers: { cookie: couple } });
+  assert((await r.text()).includes('Family,Mum & Dad,3000000,2000000,2026-09-01'));
+  assert.equal((await req(`/api/budget/funds/nope`, json('PATCH', { received: 1 }, couple))).status, 404);
+  assert.equal((await req(`/api/budget/funds/${parents.id}`, { method: 'DELETE', headers: { cookie: couple } })).status, 200);
+  assert.equal((await (await req('/api/budget', { headers: { cookie: couple } })).json()).funds.length, 1);
+  assert.equal((await req('/api/budget/funds', json('POST', { from: 'x' }, admin))).status, 403, 'funds are private too');
+
+  // Lock, then unlock with the passcode (wrong ones are refused)
+  r = await req('/api/budget/lock', { method: 'POST', headers: { cookie: couple } });
+  const relocked = cookieOf(r);
+  assert.equal((await req('/api/budget', { headers: { cookie: relocked } })).status, 403);
+  assert.equal((await req('/api/budget/unlock', json('POST', { passcode: 'guess' }, relocked))).status, 401);
+  r = await req('/api/budget/unlock', json('POST', { passcode: 'our-secret-2026' }, relocked));
+  assert.equal(r.status, 200);
+  couple = cookieOf(r);
+  assert.equal((await req('/api/budget', { headers: { cookie: couple } })).status, 200);
+
   r = await req('/api/logout', { method: 'POST', headers: { cookie: admin } });
   assert.match(r.headers.get('set-cookie'), /__session=;/);
   assert.equal((await req('/api/nope')).status, 404);

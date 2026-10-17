@@ -12,6 +12,7 @@ const content = require('./src/content');
 const { weekday, longDate } = require('./src/dates');
 const { parseCsv, toCsv } = require('./src/csv');
 const whatsapp = require('./src/whatsapp');
+const budget = require('./src/budget');
 const email = require('./src/email');
 const leads = require('./src/leads');
 
@@ -58,9 +59,12 @@ function roleOf(req) {
   if (Date.now() > Number(exp)) return null;
   return role;
 }
-const isAdmin = (req) => roleOf(req) === 'admin';
-const isStaff = (req) => ['admin', 'checkin'].includes(roleOf(req));
+// 'couple' is an admin session with the private budget unlocked (it has its own passcode).
+const isAdmin = (req) => ['admin', 'couple'].includes(roleOf(req));
+const isCouple = (req) => roleOf(req) === 'couple';
+const isStaff = (req) => ['admin', 'couple', 'checkin'].includes(roleOf(req));
 const needAdmin = (req, res, next) => (isAdmin(req) ? next() : res.status(401).json({ error: 'Sign in again' }));
+const needCouple = (req, res, next) => (isCouple(req) ? next() : res.status(isAdmin(req) ? 403 : 401).json({ error: isAdmin(req) ? 'Enter the budget passcode' : 'Sign in again' }));
 const needStaff = (req, res, next) => (isStaff(req) ? next() : res.status(401).json({ error: 'Sign in again' }));
 const safeEq = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a)).digest(), crypto.createHash('sha256').update(String(b)).digest());
 
@@ -420,6 +424,62 @@ api.post('/inbox/:thread/reply', wrap(async (req, res) => {
   }
 }));
 app.use('/api/admin', api);
+
+// ---------- private budget (admin password, then the couple's own passcode) ----------
+const BUDGET_DAYS = 1;
+const priv = express.Router();
+priv.use(needAdmin);
+priv.get('/status', wrap(async (req, res) => res.json({ passcodeSet: await budget.hasPasscode(), unlocked: isCouple(req) })));
+// First time: choose the passcode. Later: change it, only while unlocked.
+priv.post('/passcode', limit(8, 60_000), wrap(async (req, res) => {
+  if ((await budget.hasPasscode()) && !isCouple(req)) return res.status(403).json({ error: 'Unlock the budget first' });
+  try { await budget.setPasscode(req.body.passcode); } catch (e) { return res.status(400).json({ error: e.message }); }
+  issue(req, res, 'couple', BUDGET_DAYS);
+  res.json({ unlocked: true });
+}));
+priv.post('/unlock', limit(8, 60_000), wrap(async (req, res) => {
+  if (!(await budget.checkPasscode(req.body.passcode))) return res.status(401).json({ error: 'That passcode didn’t work.' });
+  issue(req, res, 'couple', BUDGET_DAYS);
+  res.json({ unlocked: true });
+}));
+priv.post('/lock', (req, res) => {
+  issue(req, res, 'admin', 30);
+  res.json({ unlocked: false });
+});
+priv.get('/', needCouple, wrap(async (req, res) => {
+  const [settings, items, funds] = await Promise.all([budget.settings(), budget.items(), budget.funds()]);
+  res.json({ settings, items, funds, categories: budget.CATEGORIES, sources: budget.SOURCES });
+}));
+priv.put('/settings', needCouple, wrap(async (req, res) => res.json(await budget.saveSettings(req.body))));
+priv.post('/items', needCouple, wrap(async (req, res) => {
+  try { res.json(await budget.addItem(req.body)); } catch (e) { res.status(400).json({ error: e.message }); }
+}));
+priv.patch('/items/:id', needCouple, wrap(async (req, res) => {
+  try {
+    const item = await budget.updateItem(req.params.id, req.body);
+    item ? res.json(item) : res.status(404).json({ error: 'That line is gone' });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+}));
+priv.delete('/items/:id', needCouple, wrap(async (req, res) => res.json({ ok: await budget.removeItem(req.params.id) })));
+priv.post('/funds', needCouple, wrap(async (req, res) => {
+  try { res.json(await budget.addFund(req.body)); } catch (e) { res.status(400).json({ error: e.message }); }
+}));
+priv.patch('/funds/:id', needCouple, wrap(async (req, res) => {
+  try {
+    const fund = await budget.updateFund(req.params.id, req.body);
+    fund ? res.json(fund) : res.status(404).json({ error: 'That entry is gone' });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+}));
+priv.delete('/funds/:id', needCouple, wrap(async (req, res) => res.json({ ok: await budget.removeFund(req.params.id) })));
+priv.get('/funds.csv', needCouple, wrap(async (req, res) => {
+  res.type('text/csv').set('Content-Disposition', 'attachment; filename="wedding-funds.csv"')
+    .send(toCsv(await budget.funds(), ['source', 'from', 'pledged', 'received', 'date', 'notes']));
+}));
+priv.get('/export.csv', needCouple, wrap(async (req, res) => {
+  res.type('text/csv').set('Content-Disposition', 'attachment; filename="wedding-budget.csv"')
+    .send(toCsv(await budget.items(), ['category', 'item', 'vendor', 'estimate', 'actual', 'paid', 'due', 'notes']));
+}));
+app.use('/api/budget', priv);
 
 // ---------- gate check-in ----------
 app.post('/api/checkin', needStaff, wrap(async (req, res) => {

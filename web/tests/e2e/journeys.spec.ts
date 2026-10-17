@@ -419,3 +419,77 @@ test('the gate camera shows a viewfinder and checks a guest in as soon as their 
     await browser.close();
   }
 });
+
+test('the budget needs the couple’s own passcode on top of the admin password', async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on('pageerror', (e) => browserErrors.push(e.message));
+  await page.request.post(`${PUBLIC}/api/login`, { data: { kind: 'admin', password: 'test-admin' } });
+  await page.goto(`${PUBLIC}/admin`);
+  await page.getByRole('link', { name: 'Budget' }).click();
+  await expect(page).toHaveURL(`${PUBLIC}/admin/budget`);
+  // The first visit chooses the passcode.
+  await expect(page.getByRole('heading', { name: 'Choose a budget passcode' })).toBeVisible();
+  await page.getByLabel('Passcode').fill('ours-only');
+  await page.getByLabel('Type it again').fill('ours-0nly');
+  await page.getByRole('button', { name: 'Set passcode and open' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'don’t match' })).toBeVisible();
+  await page.getByLabel('Type it again').fill('ours-only');
+  await page.getByRole('button', { name: 'Set passcode and open' }).click();
+
+  const totals = page.getByRole('region', { name: 'Totals' });
+  await totals.getByRole('button', { name: /Set it/ }).click();
+  await page.getByLabel('Total budget in naira').fill('10,000,000');
+  await page.getByRole('button', { name: 'Save budget' }).click();
+  await expect(totals).toContainText(/10,000,000/);
+
+  await page.getByRole('button', { name: 'Add a line' }).click();
+  await page.getByRole('combobox', { name: 'Category' }).fill('Venue');
+  await page.getByLabel('What it is').fill('Hall rental');
+  await page.getByLabel('Vendor').fill('Garden of Peace');
+  await page.getByLabel('Estimate (₦)').fill('3,000,000');
+  await page.getByLabel('Agreed price (₦)').fill('2,500,000');
+  await page.getByLabel('Paid so far (₦)').fill('1000000');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  const lines = page.getByRole('list', { name: 'Budget lines' });
+  await expect(lines.getByRole('button', { name: /Hall rental/ })).toContainText('Part paid');
+  await expect(totals).toContainText(/Expected cost.*2,500,000/);
+  await expect(totals).toContainText(/Paid so far.*1,000,000/);
+  await expect(totals).toContainText(/Still to pay.*1,500,000/);
+  await expect(totals).toContainText(/Left in budget.*7,500,000/);
+
+  await lines.getByRole('button', { name: /Hall rental/ }).click();
+  await page.getByRole('button', { name: 'Paid in full' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(lines.getByRole('button', { name: /Hall rental/ })).toContainText('all paid');
+
+  // Money coming in: a promise from the parents, part of it received so far.
+  const funds = page.getByRole('region', { name: 'Funds' });
+  await page.getByRole('button', { name: 'Record funds' }).click();
+  await page.getByLabel('From').fill('Mum & Dad');
+  await page.getByRole('combobox', { name: 'Source' }).fill('Family');
+  await page.getByLabel('Received (₦)').fill('2,000,000');
+  await page.getByLabel('Promised (₦)').fill('5,000,000');
+  await page.getByRole('button', { name: 'Record', exact: true }).click();
+  const received = page.getByRole('list', { name: 'Funds received' });
+  await expect(received.getByRole('button', { name: /Mum & Dad/ })).toContainText('Part received');
+  await expect(funds).toContainText(/Funds received.*2,000,000.*3,000,000 more promised/);
+  await expect(funds).toContainText(/Paid beyond funds.*500,000/);
+  await received.getByRole('button', { name: /Mum & Dad/ }).click();
+  await page.getByRole('button', { name: 'All received' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(funds).toContainText(/Funds in hand.*2,500,000/);
+  await expect(received.getByRole('button', { name: /Mum & Dad/ })).not.toContainText('Part received');
+
+  // Locked again, the planning team's admin password alone doesn't open it.
+  await page.getByRole('button', { name: 'Lock' }).click();
+  await expect(page.getByRole('heading', { name: 'Budget passcode' })).toBeVisible();
+  expect((await page.request.get(`${PUBLIC}/api/budget`)).status()).toBe(403);
+  await page.getByLabel('Passcode').fill('wrong-one');
+  await page.getByRole('button', { name: 'Open the budget' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'didn’t work' })).toBeVisible();
+  await page.getByLabel('Passcode').fill('ours-only');
+  await page.getByRole('button', { name: 'Open the budget' }).click();
+  await expect(page.getByRole('list', { name: 'Budget lines' })).toContainText('Hall rental');
+  await expect(page.getByRole('list', { name: 'Funds received' })).toContainText('Mum & Dad');
+  expect(browserErrors).toEqual([]);
+});
