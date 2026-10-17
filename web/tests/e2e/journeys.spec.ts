@@ -462,6 +462,24 @@ test('the budget needs the couple’s own passcode on top of the admin password'
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(lines.getByRole('button', { name: /Hall rental/ })).toContainText('all paid');
 
+  // Money coming in: a promise from the parents, part of it received so far.
+  const funds = page.getByRole('region', { name: 'Funds' });
+  await page.getByRole('button', { name: 'Record funds' }).click();
+  await page.getByLabel('From').fill('Mum & Dad');
+  await page.getByRole('combobox', { name: 'Source' }).fill('Family');
+  await page.getByLabel('Received (₦)').fill('2,000,000');
+  await page.getByLabel('Promised (₦)').fill('5,000,000');
+  await page.getByRole('button', { name: 'Record', exact: true }).click();
+  const received = page.getByRole('list', { name: 'Funds received' });
+  await expect(received.getByRole('button', { name: /Mum & Dad/ })).toContainText('Part received');
+  await expect(funds).toContainText(/Funds received.*2,000,000.*3,000,000 more promised/);
+  await expect(funds).toContainText(/Paid beyond funds.*500,000/);
+  await received.getByRole('button', { name: /Mum & Dad/ }).click();
+  await page.getByRole('button', { name: 'All received' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(funds).toContainText(/Funds in hand.*2,500,000/);
+  await expect(received.getByRole('button', { name: /Mum & Dad/ })).not.toContainText('Part received');
+
   // Locked again, the planning team's admin password alone doesn't open it.
   await page.getByRole('button', { name: 'Lock' }).click();
   await expect(page.getByRole('heading', { name: 'Budget passcode' })).toBeVisible();
@@ -472,5 +490,6 @@ test('the budget needs the couple’s own passcode on top of the admin password'
   await page.getByLabel('Passcode').fill('ours-only');
   await page.getByRole('button', { name: 'Open the budget' }).click();
   await expect(page.getByRole('list', { name: 'Budget lines' })).toContainText('Hall rental');
+  await expect(page.getByRole('list', { name: 'Funds received' })).toContainText('Mum & Dad');
   expect(browserErrors).toEqual([]);
 });

@@ -447,8 +447,8 @@ priv.post('/lock', (req, res) => {
   res.json({ unlocked: false });
 });
 priv.get('/', needCouple, wrap(async (req, res) => {
-  const [settings, items] = await Promise.all([budget.settings(), budget.items()]);
-  res.json({ settings, items, categories: budget.CATEGORIES });
+  const [settings, items, funds] = await Promise.all([budget.settings(), budget.items(), budget.funds()]);
+  res.json({ settings, items, funds, categories: budget.CATEGORIES, sources: budget.SOURCES });
 }));
 priv.put('/settings', needCouple, wrap(async (req, res) => res.json(await budget.saveSettings(req.body))));
 priv.post('/items', needCouple, wrap(async (req, res) => {
@@ -461,6 +461,20 @@ priv.patch('/items/:id', needCouple, wrap(async (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 }));
 priv.delete('/items/:id', needCouple, wrap(async (req, res) => res.json({ ok: await budget.removeItem(req.params.id) })));
+priv.post('/funds', needCouple, wrap(async (req, res) => {
+  try { res.json(await budget.addFund(req.body)); } catch (e) { res.status(400).json({ error: e.message }); }
+}));
+priv.patch('/funds/:id', needCouple, wrap(async (req, res) => {
+  try {
+    const fund = await budget.updateFund(req.params.id, req.body);
+    fund ? res.json(fund) : res.status(404).json({ error: 'That entry is gone' });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+}));
+priv.delete('/funds/:id', needCouple, wrap(async (req, res) => res.json({ ok: await budget.removeFund(req.params.id) })));
+priv.get('/funds.csv', needCouple, wrap(async (req, res) => {
+  res.type('text/csv').set('Content-Disposition', 'attachment; filename="wedding-funds.csv"')
+    .send(toCsv(await budget.funds(), ['source', 'from', 'pledged', 'received', 'date', 'notes']));
+}));
 priv.get('/export.csv', needCouple, wrap(async (req, res) => {
   res.type('text/csv').set('Content-Disposition', 'attachment; filename="wedding-budget.csv"')
     .send(toCsv(await budget.items(), ['category', 'item', 'vendor', 'estimate', 'actual', 'paid', 'due', 'notes']));

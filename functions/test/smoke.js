@@ -449,6 +449,23 @@ const store = require('../src/store');
   assert(csv.includes('Venue,SCFN hall,Sickle Cell Foundation,1500000,1400000,1400000,2026-11-30'));
   assert.equal((await req(`/api/budget/items/${hall.id}`, { method: 'DELETE', headers: { cookie: couple } })).status, 200);
   assert.equal((await (await req('/api/budget', { headers: { cookie: couple } })).json()).items.length, 1);
+  // Funds received: who from, promised and received
+  assert.equal((await req('/api/budget/funds', json('POST', { source: 'Family', from: '' }, couple))).status, 400, 'a fund needs a source');
+  r = await req('/api/budget/funds', json('POST', { source: 'Family', from: 'Mum & Dad', pledged: '₦3,000,000', received: '1,000,000', date: '2026-09-01' }, couple));
+  const parents = await r.json();
+  assert.deepEqual([parents.pledged, parents.received, parents.date], [3000000, 1000000, '2026-09-01']);
+  await req('/api/budget/funds', json('POST', { source: 'Our savings', from: 'Joint account', received: 5000000, date: '2026-10-01' }, couple));
+  r = await req(`/api/budget/funds/${parents.id}`, json('PATCH', { received: 2000000 }, couple));
+  assert.deepEqual([(await r.json()).received, parents.pledged], [2000000, 3000000], 'patch keeps the pledge');
+  const withFunds = await (await req('/api/budget', { headers: { cookie: couple } })).json();
+  assert.deepEqual(withFunds.funds.map((f) => f.from), ['Joint account', 'Mum & Dad'], 'newest first');
+  assert(withFunds.sources.includes('Family'));
+  r = await req('/api/budget/funds.csv', { headers: { cookie: couple } });
+  assert((await r.text()).includes('Family,Mum & Dad,3000000,2000000,2026-09-01'));
+  assert.equal((await req(`/api/budget/funds/nope`, json('PATCH', { received: 1 }, couple))).status, 404);
+  assert.equal((await req(`/api/budget/funds/${parents.id}`, { method: 'DELETE', headers: { cookie: couple } })).status, 200);
+  assert.equal((await (await req('/api/budget', { headers: { cookie: couple } })).json()).funds.length, 1);
+  assert.equal((await req('/api/budget/funds', json('POST', { from: 'x' }, admin))).status, 403, 'funds are private too');
 
   // Lock, then unlock with the passcode (wrong ones are refused)
   r = await req('/api/budget/lock', { method: 'POST', headers: { cookie: couple } });

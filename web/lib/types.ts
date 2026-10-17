@@ -153,7 +153,19 @@ export type BudgetItem = {
   createdAt: string;
   updatedAt: string;
 };
-export type BudgetData = { settings: { total: number }; items: BudgetItem[]; categories: string[] };
+/** Money received towards the wedding: what was promised, and what has actually arrived. */
+export type BudgetFund = {
+  id: string;
+  source: string;
+  from: string;
+  pledged: number;
+  received: number;
+  date: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+export type BudgetData = { settings: { total: number }; items: BudgetItem[]; funds: BudgetFund[]; categories: string[]; sources: string[] };
 
 /** WhatsApp conversations (GET /api/admin/inbox and /api/admin/inbox/:thread). */
 export type InboxMessage = {

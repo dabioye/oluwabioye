@@ -9,6 +9,9 @@ const CATEGORIES = [
   'Music & entertainment', 'Stationery & printing', 'Rings', 'Transport', 'Souvenirs', 'Traditional rites', 'Church', 'Other',
 ];
 
+/** Where money for the wedding comes from. */
+const SOURCES = ['Our savings', 'Family', 'Friends', 'Church', 'Gifts', 'Loan', 'Other'];
+
 const str = (v, max) => String(v ?? '').trim().slice(0, max);
 /** Whole naira, never negative or absurd. */
 const money = (v) => {
@@ -34,6 +37,24 @@ function cleanItem(input = {}, existing = null) {
   };
   if (!item.item) throw new Error('Give the line a name, e.g. “Hall rental”.');
   return item;
+}
+
+/** Money coming in: who from, what was promised, what has actually arrived, and when. */
+function cleanFund(input = {}, existing = null) {
+  const pick = (k, fn) => (k in input ? fn(input[k]) : existing ? existing[k] : fn(undefined));
+  const fund = {
+    id: existing?.id || crypto.randomUUID(),
+    source: pick('source', (v) => str(v, 60) || 'Other'),
+    from: pick('from', (v) => str(v, 120)),
+    pledged: pick('pledged', money),
+    received: pick('received', money),
+    date: pick('date', date),
+    notes: pick('notes', (v) => str(v, 1000)),
+    createdAt: existing?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  if (!fund.from) throw new Error('Say who or where it’s from, e.g. “Mum & Dad”.');
+  return fund;
 }
 
 // ---------- the passcode (only its scrypt hash is stored) ----------
@@ -78,4 +99,20 @@ async function updateItem(id, input) {
   return store.saveBudgetItem(cleanItem(input, existing));
 }
 
-module.exports = { CATEGORIES, hasPasscode, setPasscode, checkPasscode, settings, saveSettings, items, addItem, updateItem, removeItem: store.removeBudgetItem, cleanItem };
+// ---------- funds received ----------
+async function funds() {
+  const all = await store.budgetItems('funds');
+  // Newest first; promised-only entries (no date yet) at the top.
+  return all.sort((a, b) => String(b.date || '9999').localeCompare(String(a.date || '9999')) || String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+async function addFund(input) {
+  return store.saveBudgetItem(cleanFund(input), 'funds');
+}
+async function updateFund(id, input) {
+  const existing = (await store.budgetItems('funds')).find((f) => f.id === id);
+  if (!existing) return null;
+  return store.saveBudgetItem(cleanFund(input, existing), 'funds');
+}
+const removeFund = (id) => store.removeBudgetItem(id, 'funds');
+
+module.exports = { CATEGORIES, SOURCES, funds, addFund, updateFund, removeFund, cleanFund, hasPasscode, setPasscode, checkPasscode, settings, saveSettings, items, addItem, updateItem, removeItem: store.removeBudgetItem, cleanItem };

@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarClock, Check, Download, KeyRound, Loader2, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Check, Download, HandCoins, KeyRound, Loader2, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -21,7 +21,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError } from '@/lib/api';
 import { longDate } from '@/lib/format';
-import type { BudgetData, BudgetItem } from '@/lib/types';
+import type { BudgetData, BudgetFund, BudgetItem } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { StaffHeader, StaffPage } from '../staff-shell';
 
@@ -30,6 +30,8 @@ const money = (n: number) => naira.format(n || 0);
 /** What a line is expected to cost: the agreed price once known, the estimate until then. */
 const cost = (b: BudgetItem) => b.actual || b.estimate;
 const owed = (b: BudgetItem) => Math.max(cost(b) - b.paid, 0);
+/** What is still to come in from a promise. */
+const promised = (f: BudgetFund) => Math.max(f.pledged - f.received, 0);
 const today = () => new Date().toISOString().slice(0, 10);
 const daysTo = (iso: string) => Math.round((new Date(`${iso}T00:00:00`).getTime() - new Date(`${today()}T00:00:00`).getTime()) / 864e5);
 
@@ -153,6 +155,7 @@ function PasscodeForm({ firstTime, onUnlocked }: { firstTime: boolean; onUnlocke
 function BudgetView({ onLocked }: { onLocked: () => void }) {
   const [data, setData] = useState<BudgetData | null>(null);
   const [editing, setEditing] = useState<Partial<BudgetItem> | null>(null);
+  const [editingFund, setEditingFund] = useState<Partial<BudgetFund> | null>(null);
   const [category, setCategory] = useState('all');
 
   const load = useCallback(
@@ -167,6 +170,7 @@ function BudgetView({ onLocked }: { onLocked: () => void }) {
   }, [load]);
 
   const items = useMemo(() => data?.items ?? [], [data]);
+  const funds = useMemo(() => data?.funds ?? [], [data]);
   const totals = useMemo(() => {
     const expected = items.reduce((s, b) => s + cost(b), 0);
     const paid = items.reduce((s, b) => s + Math.min(b.paid, cost(b) || b.paid), 0);
@@ -195,6 +199,11 @@ function BudgetView({ onLocked }: { onLocked: () => void }) {
   if (!data) return <Loader2 className="mx-auto mt-16 animate-spin text-gold" aria-label="Loading" />;
   const target = data.settings.total;
   const left = target - totals.expected;
+  const received = funds.reduce((s, f) => s + f.received, 0);
+  const stillPromised = funds.reduce((s, f) => s + promised(f), 0);
+  const inHand = received - totals.paid;
+  // What the remaining payments still need once the money in hand and the promises that are still to come are counted.
+  const toRaise = Math.max(totals.toPay - Math.max(inHand, 0) - stillPromised, 0);
   const shown = category === 'all' ? items : items.filter((b) => b.category === category);
   const maxCategory = Math.max(1, ...byCategory.map(([, c]) => c.expected));
 
@@ -239,6 +248,22 @@ function BudgetView({ onLocked }: { onLocked: () => void }) {
           value={money(Math.abs(left))}
           tone={target ? (left < 0 ? 'bad' : 'ok') : undefined}
           note={target ? undefined : 'Set a budget to see this'}
+        />
+      </section>
+
+      <section aria-label="Funds" className="mt-2.5 grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
+        <Tile label="Funds received" value={money(received)} note={stillPromised ? `${money(stillPromised)} more promised` : undefined} />
+        <Tile
+          label={inHand < 0 ? 'Paid beyond funds' : 'Funds in hand'}
+          value={money(Math.abs(inHand))}
+          tone={inHand < 0 ? 'bad' : undefined}
+          note={inHand < 0 ? 'Paid out more than has come in' : 'Received, less what’s paid'}
+        />
+        <Tile
+          label="Still to raise"
+          value={money(toRaise)}
+          tone={totals.toPay ? (toRaise ? 'bad' : 'ok') : undefined}
+          note={totals.toPay ? (toRaise ? 'For the payments left, after promised funds' : 'Payments left are covered') : undefined}
         />
       </section>
 
@@ -287,7 +312,34 @@ function BudgetView({ onLocked }: { onLocked: () => void }) {
           )}
         </Card>
 
-        <div className="grid gap-4">
+        <Card className="min-w-0 gap-0 border-hairline-soft bg-navy-2/60 py-0 lg:col-start-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline-soft px-4 py-3">
+            <h2 className="ui-caps m-0 text-[0.72rem] text-ivory-dim">Funds received ({funds.length})</h2>
+            <div className="flex gap-2">
+              <Button asChild variant="ghost" size="icon" className="size-9 text-gold">
+                <a href="/api/budget/funds.csv" aria-label="Export funds">
+                  <Download />
+                </a>
+              </Button>
+              <Button className="h-9" onClick={() => setEditingFund({ source: data.sources[0] })}>
+                <HandCoins /> Record funds
+              </Button>
+            </div>
+          </div>
+          {funds.length === 0 ? (
+            <p className="p-8 text-center text-ivory-dim">
+              Nothing yet. Record your savings, and gifts or contributions from family and friends, as they come in.
+            </p>
+          ) : (
+            <ul className="m-0 list-none p-0" aria-label="Funds received">
+              {funds.map((f) => (
+                <FundRow key={f.id} f={f} onEdit={() => setEditingFund(f)} />
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <div className="grid gap-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
           <Card className="gap-3 border-hairline-soft bg-navy-2/60 py-4">
             <CardHeader className="px-4">
               <CardTitle className="ui-caps text-[0.72rem] text-ivory-dim">By category</CardTitle>
@@ -340,6 +392,9 @@ function BudgetView({ onLocked }: { onLocked: () => void }) {
         </div>
       </div>
 
+      {editingFund && (
+        <FundDialog key={editingFund.id || 'new'} fund={editingFund} sources={data.sources} onClose={() => setEditingFund(null)} onSaved={load} />
+      )}
       {editing && <LineDialog key={editing.id || 'new'} line={editing} categories={data.categories} onClose={() => setEditing(null)} onSaved={load} />}
     </>
   );
@@ -456,6 +511,161 @@ function Line({ b, onEdit }: { b: BudgetItem; onEdit: () => void }) {
   );
 }
 
+function FundRow({ f, onEdit }: { f: BudgetFund; onEdit: () => void }) {
+  return (
+    <li className="border-b border-hairline-soft last:border-0">
+      <button
+        type="button"
+        onClick={onEdit}
+        className="grid w-full cursor-pointer gap-1 border-0 bg-transparent px-4 py-3 text-left hover:bg-gold/5 sm:grid-cols-[minmax(0,1fr)_auto]"
+      >
+        <span className="min-w-0">
+          <b className="block font-medium [overflow-wrap:anywhere] text-ivory">
+            {f.from}
+            {promised(f) > 0 && (
+              <Badge variant="outline" className="ml-2 border-warn/50 align-middle text-[0.65rem] font-normal text-warn">
+                {f.received ? 'Part received' : 'Promised'}
+              </Badge>
+            )}
+          </b>
+          <small className="block text-[0.78rem] text-ivory-dim">{[f.source, f.date && `received ${longDate(f.date)}`].filter(Boolean).join(' · ')}</small>
+        </span>
+        <span className="grid justify-items-start text-[0.85rem] tabular-nums sm:justify-items-end">
+          <span className="font-medium">{money(f.received)}</span>
+          {promised(f) > 0 && <small className="text-[0.75rem] text-ivory-dim">of {money(f.pledged)} promised</small>}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+const labelClass = 'text-[0.72rem] tracking-[0.12em] text-ivory-dim uppercase';
+
+function ConfirmDelete({ open, onOpenChange, name, onDelete }: { open: boolean; onOpenChange: (o: boolean) => void; name?: string; onDelete: () => void }) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete “{name}”?</AlertDialogTitle>
+          <AlertDialogDescription>This can’t be undone.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep it</AlertDialogCancel>
+          <AlertDialogAction onClick={onDelete}>Delete</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+type FundForm = { source: string; from: string; pledged: string; received: string; date: string; notes: string };
+
+function FundDialog({ fund, sources, onClose, onSaved }: { fund: Partial<BudgetFund>; sources: string[]; onClose: () => void; onSaved: () => void }) {
+  const [f, setF] = useState<FundForm>({
+    source: fund.source || '',
+    from: fund.from || '',
+    pledged: num(fund.pledged),
+    received: num(fund.received),
+    date: fund.date || (fund.id ? '' : today()),
+    notes: fund.notes || '',
+  });
+  const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const set = (k: keyof FundForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const field = (k: keyof FundForm, label: string, props: React.ComponentProps<typeof Input> = {}) => (
+    <div className="grid gap-1.5">
+      <Label htmlFor={`f-${k}`} className={labelClass}>
+        {label}
+      </Label>
+      <Input id={`f-${k}`} value={f[k]} onChange={set(k)} className="h-10" {...props} />
+    </div>
+  );
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      if (fund.id) await api(`/api/budget/funds/${fund.id}`, { method: 'PATCH', body: f });
+      else await api('/api/budget/funds', { body: f });
+      toast.success(fund.id ? 'Saved' : 'Recorded');
+      onSaved();
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Couldn’t save');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[92vh] max-w-lg overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{fund.id ? 'Edit funds' : 'Record funds'}</DialogTitle>
+          <DialogDescription>Amounts in naira. For a promise that hasn’t all arrived yet, fill in both amounts.</DialogDescription>
+        </DialogHeader>
+        <form id="budget-fund" onSubmit={save} className="grid gap-3 sm:grid-cols-2">
+          {field('from', 'From', { required: true, placeholder: 'e.g. Mum & Dad' })}
+          {field('source', 'Source', { list: 'fund-sources', required: true })}
+          <datalist id="fund-sources">
+            {sources.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="f-received" className={labelClass}>
+              Received (₦)
+            </Label>
+            <div className="flex gap-2">
+              <Input id="f-received" value={f.received} onChange={set('received')} inputMode="numeric" placeholder="0" className="h-10" />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!f.pledged}
+                className="h-10 shrink-0 border-gold/40 bg-transparent text-gold"
+                onClick={() => setF((x) => ({ ...x, received: x.pledged }))}
+              >
+                <Check /> All received
+              </Button>
+            </div>
+          </div>
+          {field('pledged', 'Promised (₦)', { inputMode: 'numeric', placeholder: 'If more is coming' })}
+          {field('date', 'Date received', { type: 'date' })}
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="f-notes" className={labelClass}>
+              Notes
+            </Label>
+            <Textarea id="f-notes" value={f.notes} onChange={set('notes')} rows={2} placeholder="Transfer reference, what it’s for…" />
+          </div>
+        </form>
+        <DialogFooter className="gap-2 sm:justify-between">
+          {fund.id ? (
+            <Button type="button" variant="ghost" className="text-bad hover:text-bad" onClick={() => setConfirmDelete(true)}>
+              <Trash2 /> Delete
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button type="submit" form="budget-fund" disabled={busy}>
+            {busy && <Loader2 className="animate-spin" />} {fund.id ? 'Save' : 'Record'}
+          </Button>
+        </DialogFooter>
+        <ConfirmDelete
+          open={confirmDelete}
+          onOpenChange={setConfirmDelete}
+          name={fund.from}
+          onDelete={async () => {
+            await api(`/api/budget/funds/${fund.id}`, { method: 'DELETE' });
+            toast.success('Deleted');
+            onSaved();
+            onClose();
+          }}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 type Form = { category: string; item: string; vendor: string; estimate: string; actual: string; paid: string; due: string; notes: string };
 const num = (n?: number) => (n ? String(n) : '');
 
@@ -552,27 +762,17 @@ function LineDialog({ line, categories, onClose, onSaved }: { line: Partial<Budg
             {busy && <Loader2 className="animate-spin" />} {line.id ? 'Save' : 'Add'}
           </Button>
         </DialogFooter>
-        <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete “{line.item}”?</AlertDialogTitle>
-              <AlertDialogDescription>This can’t be undone.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Keep it</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={async () => {
-                  await api(`/api/budget/items/${line.id}`, { method: 'DELETE' });
-                  toast.success('Deleted');
-                  onSaved();
-                  onClose();
-                }}
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDelete
+          open={confirmDelete}
+          onOpenChange={setConfirmDelete}
+          name={line.item}
+          onDelete={async () => {
+            await api(`/api/budget/items/${line.id}`, { method: 'DELETE' });
+            toast.success('Deleted');
+            onSaved();
+            onClose();
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
