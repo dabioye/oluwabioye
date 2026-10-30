@@ -8,6 +8,7 @@ const defaults = JSON.parse(JSON.stringify({
   giftsMessage: cfg.gifts.message, publicNotes: cfg.publicNotes, rsvpBy: cfg.rsvpBy,
   invitationArt: { church: cfg.invitationArt.church, trad: cfg.invitationArt.trad }, intro: cfg.intro,
   waAutoSend: false,
+  churchRsvpOpen: cfg.churchRsvp.open !== false,
   nameFont: 'Cookie',
 }));
 
@@ -30,6 +31,7 @@ function sanitize(input = {}) {
   if (input.invitationArt) out.invitationArt = { church: url(input.invitationArt.church), trad: url(input.invitationArt.trad) };
   if (input.intro) out.intro = { home: !!input.intro.home, invite: !!input.intro.invite };
   if ('waAutoSend' in input) out.waAutoSend = !!input.waAutoSend;
+  if ('churchRsvpOpen' in input) out.churchRsvpOpen = !!input.churchRsvpOpen;
   if (cfg.nameFonts.includes(input.nameFont)) out.nameFont = input.nameFont;
   return out;
 }
@@ -57,6 +59,7 @@ function publicView(c) {
     rsvpBy: c.rsvpBy,
     invitationArt: { church: c.invitationArt?.church || defaults.invitationArt.church },
     intro: { home: c.intro?.home !== false },
+    churchRsvp: { open: c.churchRsvpOpen !== false, maxParty: cfg.churchRsvp.maxParty },
   };
 }
 

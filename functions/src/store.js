@@ -2,6 +2,7 @@
 //   - Firestore: used on Firebase (or when STORE=firestore, e.g. against the emulator)
 //   - JSON file: used for local development / any plain Node host
 const crypto = require('crypto');
+const cfg = require('./config');
 
 // No 0/O/1/I/L so codes are easy to read aloud and type at the gate.
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -49,7 +50,7 @@ function cleanPublicRsvp(input) {
   const phone = String(input.phone || '').trim().slice(0, 30);
   if (!name) throw new Error('Please enter your name.');
   if (!phone && !String(input.email || '').trim()) throw new Error('Please add a phone number or email so we can reach you.');
-  const party = Math.min(10, Math.max(1, parseInt(input.party, 10) || 1));
+  const party = Math.min(cfg.churchRsvp.maxParty || 10, Math.max(1, parseInt(input.party, 10) || 1));
   return {
     name, phone, email: String(input.email || '').trim().slice(0, 120),
     attending: input.attending === 'no' ? 'no' : 'yes',
@@ -147,7 +148,7 @@ function jsonBackend() {
     // Private records kept by name (e.g. the budget passcode), and the budget's lines and funds.
     async getDoc(name) { return JSON.parse(JSON.stringify((state.docs || {})[name] || null)); },
     async setDoc(name, obj) { (state.docs ||= {})[name] = obj; await persist(); },
-    // `col` is 'budget' (spending lines) or 'funds' (money received).
+    // Simple collections keyed by id: 'budget' (spending lines), 'funds' (money received), 'wishes' (guests' messages).
     async budgetItems(col = 'budget') { return (state[col] || []).map((b) => ({ ...b })); },
     async saveBudgetItem(item, col = 'budget') {
       state[col] ||= [];

@@ -1,5 +1,5 @@
 'use client';
-import { BookOpen, CalendarPlus, Camera, Gift, MapPin } from 'lucide-react';
+import { BookOpen, CalendarPlus, Camera, Gift, MailCheck, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Countdown } from '@/components/wedding/countdown';
 import { EventDetails } from '@/components/wedding/event-details';
@@ -14,6 +14,7 @@ import { longDate, weekday } from '@/lib/format';
 import { Gallery } from './gallery';
 import { Registry } from './registry';
 import { StoryTimeline } from './story';
+import { Wishes } from './wishes';
 
 const c = cfg.couple;
 const church = cfg.events.church;
@@ -76,6 +77,7 @@ export function HomeView() {
       <SiteNav
         links={[
           { href: '/invitation', label: 'Invitation' },
+          ...(content.churchRsvp.open ? [{ href: '/rsvp', label: 'RSVP' }] : []),
           { href: '/our-story', label: 'Our Story' },
           { href: '/gallery', label: 'Gallery' },
           { href: content.registryUrl || '#gifts', label: 'Gift Registry', external: !!content.registryUrl },
@@ -149,6 +151,16 @@ export function HomeView() {
               </a>
             </Button>
           </EventDetails>
+          {content.churchRsvp.open && (
+            <div className="mt-6 grid justify-items-center gap-2">
+              <Button asChild size="lg" className="ui-caps h-12 rounded-[2px] px-7 text-[0.76rem] tracking-[0.22em]">
+                <a href="/rsvp">
+                  <MailCheck /> RSVP for the church
+                </a>
+              </Button>
+              <p className="m-0 font-ui text-[0.8rem] text-ivory-dim">Let us know if you’ll be with us, and how many are coming.</p>
+            </div>
+          )}
           {content.publicNotes.length > 0 && (
             <ul className="mx-auto mt-5 grid max-w-[34em] list-none gap-3 p-0 text-left">
               {content.publicNotes.map((n) => (
@@ -212,6 +224,8 @@ export function HomeView() {
 
         <Registry content={content} />
 
+        <Wishes />
+
         <section className="pt-2.5 pb-5 text-center">
           <div className="eyebrow">Questions</div>
           <Contacts />
@@ -220,6 +234,7 @@ export function HomeView() {
       <SiteFooter />
       <Dock
         items={[
+          content.churchRsvp.open && { href: '/rsvp', icon: MailCheck, label: 'RSVP' },
           { href: '/our-story', icon: BookOpen, label: 'Our story' },
           { href: '/gallery', icon: Camera, label: 'Gallery' },
           content.registryUrl

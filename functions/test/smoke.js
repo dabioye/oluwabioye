@@ -34,10 +34,15 @@ const store = require('../src/store');
   assert(!JSON.stringify(pub).includes('invite-trad'), 'trad card not exposed on the public site');
   assert.equal(pub.intro.home, true);
 
-  // Church RSVP is closed
+  // Church RSVP at /rsvp: open by default, one reply per phone number, party size capped
+  assert.deepEqual(pub.churchRsvp, { open: true, maxParty: 6 });
   r = await req('/api/rsvp', json('POST', { name: 'Bisi Ade', phone: '0803 111 2222', attending: 'yes', party: '3' }));
-  assert.equal(r.status, 410);
-  assert.equal((await store.publicRsvps()).length, 0);
+  assert.deepEqual(await r.json(), { updated: false });
+  r = await req('/api/rsvp', json('POST', { name: 'Bisi Ade', phone: '+234 803 111 2222', attending: 'yes', party: '40' }));
+  assert.deepEqual(await r.json(), { updated: true }, 'the same number updates its reply');
+  assert.equal((await req('/api/rsvp', json('POST', { name: '', phone: '0803' }))).status, 400);
+  const church = await store.publicRsvps();
+  assert.deepEqual([church.length, church[0].party], [1, 6]);
 
   // Sessions
   assert.deepEqual(await (await req('/api/session')).json(), { role: null });
@@ -107,7 +112,9 @@ const store = require('../src/store');
   const d = await r.json();
   const t = d.guests.find((x) => x.code === g.code);
   assert(t.openedAt && t.openCount === 3 && t.checkedInAt && t.rsvp === 'yes');
-  assert.equal(d.church.length, 0);
+  assert.equal(d.church, undefined, 'church RSVPs are kept off the desk');
+  assert.equal((await (await req('/api/admin/church', { headers: { cookie: admin } })).json()).church.length, 1);
+  assert.equal((await req('/api/admin/church')).status, 401);
   r = await req('/api/admin/export.csv', { headers: { cookie: admin } });
   assert((await r.text()).includes('Ade, Jnr'));
   r = await req('/calendar/church.ics');
@@ -131,6 +138,34 @@ const store = require('../src/store');
   assert.equal(c2.registryUrl, 'https://withjoy.com/sd');
   assert.equal(c2.story[0].title, 'We met');
   assert.equal(c2.intro.home, false);
+  // The couple can close the church RSVP
+  await req('/api/admin/site', json('PUT', { churchRsvpOpen: false }, admin));
+  assert.equal((await (await req('/api/content')).json()).churchRsvp.open, false);
+  assert.equal((await req('/api/rsvp', json('POST', { name: 'Late Reply', phone: '0809' }))).status, 410);
+  await req('/api/admin/site', json('PUT', { churchRsvpOpen: true }, admin));
+
+  // Wishes: anyone can leave one, it shows only once approved, and moderation is admin-only
+  assert.equal((await req('/api/wishes', json('POST', { name: 'Aunty Bose', message: '' }))).status, 400);
+  assert.deepEqual(await (await req('/api/wishes', json('POST', { name: 'Aunty Bose', message: 'God bless your home!' }))).json(), { ok: true });
+  await req('/api/wishes', json('POST', { name: 'Spam', message: 'Buy now', website: 'x.test' }));
+  r = await req('/api/wishes');
+  assert.match(r.headers.get('cache-control'), /public/);
+  assert.deepEqual((await r.json()).wishes, [], 'nothing shows before approval');
+  assert.equal((await req('/api/admin/wishes')).status, 401);
+  assert.equal((await req('/api/admin/wishes', { headers: { cookie: gate } })).status, 401, 'not for ushers');
+  let ws = (await (await req('/api/admin/wishes', { headers: { cookie: admin } })).json()).wishes;
+  assert.deepEqual(ws.map((w) => [w.name, w.status]), [['Aunty Bose', 'pending']], 'the bot trap saves nothing');
+  assert.equal((await req(`/api/admin/wishes/${ws[0].id}`, json('PATCH', { status: 'published' }, admin))).status, 400);
+  r = await req(`/api/admin/wishes/${ws[0].id}`, json('PATCH', { status: 'approved' }, admin));
+  assert.equal((await r.json()).status, 'approved');
+  const shown = (await (await req('/api/wishes')).json()).wishes;
+  assert.deepEqual(shown.map((w) => [w.name, w.message]), [['Aunty Bose', 'God bless your home!']]);
+  assert.equal('status' in shown[0], false, 'visitors don’t see moderation details');
+  await req(`/api/admin/wishes/${ws[0].id}`, json('PATCH', { status: 'hidden' }, admin));
+  assert.deepEqual((await (await req('/api/wishes')).json()).wishes, []);
+  assert.equal((await req(`/api/admin/wishes/${ws[0].id}`, { method: 'DELETE', headers: { cookie: admin } })).status, 200);
+  ws = (await (await req('/api/admin/wishes', { headers: { cookie: admin } })).json()).wishes;
+  assert.equal(ws.length, 0);
 
   // Two domains: links point at the invite site; the trad calendar is not offered on the public site
   process.env.BASE_URL = 'http://public.test';

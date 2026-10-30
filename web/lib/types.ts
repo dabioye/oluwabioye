@@ -15,6 +15,8 @@ export type PublicContent = {
   rsvpBy: string;
   invitationArt: { church: string };
   intro: { home: boolean };
+  /** The public church RSVP at /rsvp. */
+  churchRsvp: { open: boolean; maxParty: number };
 };
 
 /** A guest as their own invitation sees them. */
@@ -130,6 +132,8 @@ export type SiteSettings = {
   intro: { home: boolean; invite: boolean };
   /** Send the WhatsApp invitation as soon as a guest is added or imported. */
   waAutoSend?: boolean;
+  /** The public church RSVP at /rsvp is taking replies. */
+  churchRsvpOpen?: boolean;
   /** Script font for guests' names on the traditional card. */
   nameFont?: string;
   /** Read-only: the invite site, where the traditional card is served from. */
@@ -196,3 +200,8 @@ export type InboxConversation = {
   messages: InboxMessage[];
   windowUntil: string | null;
 };
+
+/** A message left for the couple on the public site, as visitors see it once approved. */
+export type PublicWish = { id: string; name: string; message: string; at: string };
+/** The same message as the admin sees it, waiting for approval, shown or hidden. */
+export type Wish = { id: string; name: string; message: string; status: 'pending' | 'approved' | 'hidden'; createdAt: string; reviewedAt: string | null };

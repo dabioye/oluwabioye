@@ -15,6 +15,7 @@ const whatsapp = require('./src/whatsapp');
 const budget = require('./src/budget');
 const email = require('./src/email');
 const leads = require('./src/leads');
+const wishes = require('./src/wishes');
 
 const PORT = process.env.PORT || 3000;
 const env = (k) => process.env[k] || '';
@@ -180,11 +181,25 @@ app.get('/calendar/:key.ics', (req, res) => {
   res.type('text/calendar').set('Content-Disposition', `attachment; filename="${ev.key}.ics"`).send(ics);
 });
 
-// Church RSVP (only while churchRsvp.open is true in config).
+// Church RSVP at /rsvp: who is expected in church (open or closed in Edit website).
 app.post('/api/rsvp', limit(10, 60_000), wrap(async (req, res) => {
-  if (cfg.churchRsvp.open === false) return res.status(410).json({ error: 'RSVP is closed.' });
+  if ((await content.current()).churchRsvpOpen === false) return res.status(410).json({ error: 'RSVP for the church wedding is closed.' });
   if (req.body.website) return res.json({ ok: true }); // bot trap
   try { res.json(await store.savePublicRsvp(req.body)); } catch (e) { res.status(400).json({ error: e.message }); }
+}));
+
+// Wishes for the couple: anyone can leave one; it shows on the site once an admin approves it.
+app.get('/api/wishes', wrap(async (req, res) => {
+  // Browsers always ask again (so an approved wish shows on the next visit); the CDN keeps it for a minute.
+  res.set('Cache-Control', 'public, max-age=0, s-maxage=60');
+  res.json({ wishes: await wishes.approved() });
+}));
+app.post('/api/wishes', limit(5, 10 * 60e3), wrap(async (req, res) => {
+  if (req.body.website) return res.json({ ok: true }); // bot trap
+  const { wish, error } = await wishes.add(req.body);
+  if (error) return res.status(400).json({ error });
+  await store.logActivity('wish', { id: null, name: wish.name });
+  res.json({ ok: true });
 }));
 
 // ---------- private invitations ----------
@@ -277,8 +292,10 @@ const guestOr404 = async (req, res) => {
   return g;
 };
 api.get('/guests', wrap(async (req, res) => {
-  const [guests, activity, church] = await Promise.all([store.all(), store.activity(60), store.publicRsvps()]);
-  res.json({ guests: guests.map(publicGuest), activity, church, baseUrl: BASE_URL(), inviteUrl: INVITE_URL() });
+  const [guests, activity] = await Promise.all([store.all(), store.activity(80)]);
+  // The desk is the private invitations: public church RSVPs and wishes have their own pages.
+  const own = activity.filter((x) => !['church', 'wish'].includes(x.type)).slice(0, 60);
+  res.json({ guests: guests.map(publicGuest), activity: own, baseUrl: BASE_URL(), inviteUrl: INVITE_URL() });
 }));
 api.post('/guests', wrap(async (req, res) => {
   let g;
@@ -339,6 +356,8 @@ api.get('/export.csv', wrap(async (req, res) => {
   const all = await store.all();
   res.type('text/csv').set('Content-Disposition', 'attachment; filename="traditional-guests.csv"').send(toCsv(all.map((g) => ({ ...g, link: inviteLink(g), events: g.events.join(' ') }))));
 }));
+// Public church RSVPs (/rsvp), kept apart from the private invitations on the desk.
+api.get('/church', wrap(async (req, res) => res.json({ church: await store.publicRsvps() })));
 api.get('/church.csv', wrap(async (req, res) => {
   const rows = await store.publicRsvps();
   res.type('text/csv').set('Content-Disposition', 'attachment; filename="church-rsvps.csv"')
@@ -423,6 +442,14 @@ api.post('/inbox/:thread/reply', wrap(async (req, res) => {
     res.status(400).json({ error: e.message });
   }
 }));
+// Wishes waiting for approval, and the ones already shown or hidden.
+api.get('/wishes', wrap(async (req, res) => res.json({ wishes: await wishes.all() })));
+api.patch('/wishes/:id', wrap(async (req, res) => {
+  if (!wishes.STATUSES.includes(req.body.status)) return res.status(400).json({ error: 'Choose approve or hide' });
+  const w = await wishes.setStatus(req.params.id, req.body.status);
+  w ? res.json(w) : res.status(404).json({ error: 'That message is gone' });
+}));
+api.delete('/wishes/:id', wrap(async (req, res) => res.json({ ok: await wishes.remove(req.params.id) })));
 app.use('/api/admin', api);
 
 // ---------- private budget (admin password, then the couple's own passcode) ----------
