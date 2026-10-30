@@ -6,7 +6,7 @@ import { longDate } from '@/lib/format';
 const c = cfg.couple;
 export const metadata: Metadata = {
   title: `RSVP · ${c.bride} & ${c.groom}`,
-  description: `Let ${c.bride} and ${c.groom} know if you’ll be at their church wedding on ${longDate(cfg.date)}.`,
+  description: `Let ${c.bride} and ${c.groom} know if you’ll be attending their wedding on ${longDate(cfg.date)}.`,
 };
 
 export default function Page() {
