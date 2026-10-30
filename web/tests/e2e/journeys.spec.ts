@@ -36,7 +36,7 @@ test('public site: church wedding only, no code box', async ({ page }) => {
   // No invitation-code box: the only form fields are the wish form's.
   await expect(page.locator('input:visible')).toHaveCount(1);
   await expect(page.getByLabel('Your name')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'RSVP for the church' })).toHaveAttribute('href', '/rsvp');
+  await expect(page.locator('#day').getByRole('link', { name: 'RSVP', exact: true })).toHaveAttribute('href', '/rsvp');
 
   // The invitation page is the printed card, then date, time and place with directions and calendar, then the registry.
   await page.goto(`${PUBLIC}/invitation`);
@@ -61,7 +61,7 @@ test('public site: church wedding only, no code box', async ({ page }) => {
 test('church guests RSVP on the website and the couple sees who is expected', async ({ page }) => {
   await skipIntro(page);
   await page.goto(`${PUBLIC}/rsvp`);
-  await expect(page.getByRole('heading', { name: 'Will you be with us in church?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Will you be attending our wedding?' })).toBeVisible();
   await page.getByLabel('Your name').fill('Yemi Coker');
   await page.getByLabel('Phone / WhatsApp').fill('0805 444 1212');
   await page.getByLabel('How many of you, including you?').selectOption('3');

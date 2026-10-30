@@ -155,7 +155,7 @@ export function HomeView() {
             <div className="mt-6 grid justify-items-center gap-2">
               <Button asChild size="lg" className="ui-caps h-12 rounded-[2px] px-7 text-[0.76rem] tracking-[0.22em]">
                 <a href="/rsvp">
-                  <MailCheck /> RSVP for the church
+                  <MailCheck /> RSVP
                 </a>
               </Button>
               <p className="m-0 font-ui text-[0.8rem] text-ivory-dim">Let us know if you’ll be with us, and how many are coming.</p>

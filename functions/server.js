@@ -183,7 +183,7 @@ app.get('/calendar/:key.ics', (req, res) => {
 
 // Church RSVP at /rsvp: who is expected in church (open or closed in Edit website).
 app.post('/api/rsvp', limit(10, 60_000), wrap(async (req, res) => {
-  if ((await content.current()).churchRsvpOpen === false) return res.status(410).json({ error: 'RSVP for the church wedding is closed.' });
+  if ((await content.current()).churchRsvpOpen === false) return res.status(410).json({ error: 'RSVP is closed.' });
   if (req.body.website) return res.json({ ok: true }); // bot trap
   try { res.json(await store.savePublicRsvp(req.body)); } catch (e) { res.status(400).json({ error: e.message }); }
 }));

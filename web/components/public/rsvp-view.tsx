@@ -49,7 +49,7 @@ export function RsvpView() {
             {c.bride} &amp; {c.groom}
           </p>
           <Rule />
-          <h1 className="display m-0 text-[clamp(1.4rem,4.4vw,2rem)]">Will you be with us in church?</h1>
+          <h1 className="display m-0 text-[clamp(1.4rem,4.4vw,2rem)]">Will you be attending our wedding?</h1>
           <p className="lede mt-3">
             {church.name} · {weekday()} {longDate(cfg.date)} · {church.time}
             <br />
@@ -63,7 +63,7 @@ export function RsvpView() {
             <h2 className="mt-2 mb-0 font-display text-2xl font-medium">Thank you, {first}</h2>
             <p className="lede mt-2 mb-0">
               {f.attending === 'yes'
-                ? `We look forward to seeing ${f.party > 1 ? `all ${f.party} of you` : 'you'} in church.`
+                ? `We look forward to seeing ${f.party > 1 ? `all ${f.party} of you` : 'you'} there.`
                 : 'We’ll miss you, and we’re grateful for your love and prayers.'}
               {done.updated ? ' We’ve updated your earlier reply.' : ''}
             </p>
@@ -88,7 +88,7 @@ export function RsvpView() {
           </section>
         ) : !open ? (
           <p className="lede mt-8 rounded-lg border border-dashed border-gold/50 p-6 text-center italic">
-            RSVP for the church wedding is closed. If you have a question, please contact Busayo or Hope.
+            RSVP is closed. If you have a question, please contact Busayo or Hope.
           </p>
         ) : (
           <form
