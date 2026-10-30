@@ -60,9 +60,9 @@ module.exports = {
     // e.g. 'Please be seated by 9:45 AM.'
   ],
 
-  // Public RSVP for the church wedding. Off: RSVPs are only taken on private invitations (/i/CODE).
-  // Set open: true to bring the RSVP form back on the public site.
-  churchRsvp: { open: false, maxParty: 6 },
+  // Public RSVP for the church wedding at /rsvp: records who is expected in church. `open` is the default;
+  // the couple can switch it on or off in Edit website. maxParty is the most people one reply can bring.
+  churchRsvp: { open: true, maxParty: 6 },
 
   // Gift registry on withjoy.com. Paste your registry link here.
   registryUrl: 'https://wishgum.com/w/sarahdamilare_',

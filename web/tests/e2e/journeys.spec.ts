@@ -16,7 +16,7 @@ async function addGuest(request: APIRequestContext, body: Record<string, unknown
   return (await r.json()) as { code: string; name: string; id: string };
 }
 
-test('public site: church wedding only, no RSVP, no code box', async ({ page }) => {
+test('public site: church wedding only, no code box', async ({ page }) => {
   await page.goto(PUBLIC);
   await expect(page.getByRole('button', { name: 'Open the invitation' })).toBeVisible();
   await page.getByRole('button', { name: 'Open the invitation' }).click();
@@ -33,8 +33,10 @@ test('public site: church wedding only, no RSVP, no code box', async ({ page }) 
   const body = await page.locator('body').innerText();
   expect(body).toContain('Garden of Peace');
   expect(body).not.toMatch(/SCFN|Traditional Wedding/);
-  expect(body).not.toMatch(/rsvp/i);
-  await expect(page.locator('input')).toHaveCount(0);
+  // No invitation-code box: the only form fields are the wish form's.
+  await expect(page.locator('input:visible')).toHaveCount(1);
+  await expect(page.getByLabel('Your name')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'RSVP for the church' })).toHaveAttribute('href', '/rsvp');
 
   // The invitation page is the printed card, then date, time and place with directions and calendar, then the registry.
   await page.goto(`${PUBLIC}/invitation`);
@@ -54,6 +56,48 @@ test('public site: church wedding only, no RSVP, no code box', async ({ page }) 
   await expect(page.getByRole('heading', { name: 'Moments so far' })).toBeVisible();
   await page.goto(`${PUBLIC}/our-story`);
   await expect(page.getByRole('heading', { name: /The Making/ })).toBeVisible();
+});
+
+test('church guests RSVP on the website and the couple sees who is expected', async ({ page }) => {
+  await skipIntro(page);
+  await page.goto(`${PUBLIC}/rsvp`);
+  await expect(page.getByRole('heading', { name: 'Will you be with us in church?' })).toBeVisible();
+  await page.getByLabel('Your name').fill('Yemi Coker');
+  await page.getByLabel('Phone / WhatsApp').fill('0805 444 1212');
+  await page.getByLabel('How many of you, including you?').selectOption('3');
+  await page.getByRole('button', { name: 'Send RSVP' }).click();
+  await expect(page.getByRole('heading', { name: 'Thank you, Yemi' })).toBeVisible();
+  await expect(page.getByText('all 3 of you')).toBeVisible();
+
+  await page.goto(`${PUBLIC}/admin`);
+  await page.getByLabel('Password').fill('test-admin');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  const church = page.locator('#church');
+  await expect(church.getByRole('row', { name: /Yemi Coker/ })).toContainText('Attending');
+});
+
+test('a wish shows on the website only after the couple approves it', async ({ page }) => {
+  await skipIntro(page);
+  await page.goto(`${PUBLIC}/#wishes`);
+  const wishes = page.locator('#wishes');
+  await wishes.getByLabel('Your name').fill('Uncle Femi');
+  await wishes.getByLabel('Your wish').fill('May your home overflow with joy.');
+  await wishes.getByRole('button', { name: 'Send your wish' }).click();
+  await expect(wishes.getByText('Thank you, Uncle')).toBeVisible();
+  await page.reload();
+  await expect(page.locator('#wishes')).not.toContainText('overflow with joy');
+
+  await page.goto(`${PUBLIC}/admin/wishes`);
+  await page.getByLabel('Password').fill('test-admin');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('May your home overflow with joy.')).toBeVisible();
+  await page.getByRole('button', { name: 'Approve' }).click();
+  await expect(page.getByText('Uncle Femi’s wish is on the website')).toBeVisible();
+
+  // The public list is cached briefly at the CDN; the local server serves it fresh.
+  await page.goto(`${PUBLIC}/#wishes`);
+  await expect(page.locator('#wishes')).toContainText('May your home overflow with joy.');
+  await expect(page.locator('#wishes')).toContainText('Uncle Femi');
 });
 
 test('the public build never ships traditional-wedding files', async () => {

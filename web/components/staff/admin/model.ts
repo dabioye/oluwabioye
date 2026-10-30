@@ -66,6 +66,7 @@ export function activityText(a: Activity) {
     wareply: `${a.name} replied on WhatsApp: “${a.extra}”`,
     wafailed: `WhatsApp invite to ${a.name} failed${a.extra ? `: ${a.extra}` : ''}`,
     church: `${a.name} replied to the church RSVP (${a.extra})`,
+    wish: `${a.name} left a wish, waiting for approval`,
   };
   return t[a.type] || a.type;
 }

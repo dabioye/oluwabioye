@@ -193,6 +193,7 @@ export function Desk() {
         subtitle={`${weekday()} ${longDate(cfg.date)} · RSVP by ${longDate(cfg.rsvpBy)}`}
         links={[
           { href: '/admin/inbox', label: 'Inbox' },
+          { href: '/admin/wishes', label: 'Wishes' },
           { href: '/admin/budget', label: 'Budget' },
           { href: '/admin/site', label: 'Edit website' },
           { href: '/', label: 'Website', external: true },
@@ -633,7 +634,7 @@ function ChurchRsvps({ rows, onChanged }: { rows: ChurchRsvp[]; onChanged: () =>
             ) : (
               <TableRow>
                 <TableCell colSpan={7} className="py-6 text-center text-ivory-dim">
-                  No church RSVPs. The public RSVP is switched off, so guests reply on their private invitations.
+                  No church RSVPs yet. Guests reply at /rsvp on the website (you can close it in Edit website).
                 </TableCell>
               </TableRow>
             )}

@@ -60,6 +60,7 @@ export function Inbox() {
         subtitle={unread ? `${unread} unread ${unread === 1 ? 'reply' : 'replies'}` : 'Guests’ WhatsApp replies'}
         links={[
           { href: '/admin', label: 'Invitation desk' },
+          { href: '/admin/wishes', label: 'Wishes' },
           { href: '/admin/site', label: 'Edit website' },
         ]}
         signOutTo="/admin"

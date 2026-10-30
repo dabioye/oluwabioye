@@ -14,6 +14,7 @@ export const defaultContent: PublicContent = {
   rsvpBy: cfg.rsvpBy,
   invitationArt: { church: cfg.invitationArt.church },
   intro: { home: cfg.intro.home },
+  churchRsvp: cfg.churchRsvp,
 };
 
 const KEY = 'sd:content';
@@ -24,7 +25,8 @@ let loading = false;
 function cached(): PublicContent | null {
   try {
     const s = localStorage.getItem(KEY);
-    return s ? (JSON.parse(s) as PublicContent) : null;
+    // Over the defaults, so a copy saved before a field existed still has it.
+    return s ? { ...defaultContent, ...(JSON.parse(s) as PublicContent) } : null;
   } catch {
     return null;
   }

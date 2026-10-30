@@ -4,8 +4,8 @@ Two static websites (Next.js + Tailwind + shadcn/ui) on Firebase Hosting, with o
 
 | Address | Who | What |
 | --- | --- | --- |
-| `sarahanddamilare.dabioye.com` | **Public** | Church wedding website: ceremony details, directions, add-to-calendar, Our Story, gallery, the printed church invitation, **Joy gift registry**, contacts. No traditional-wedding details and no RSVP. |
-| `sarahanddamilare.dabioye.com/admin` | You two + planners | Invitation desk (guest list, WhatsApp sending, sent → opened → RSVP → arrived tracking, CSV import/export) and **Edit website**. |
+| `sarahanddamilare.dabioye.com` | **Public** | Church wedding website: ceremony details, directions, add-to-calendar, Our Story, gallery, the printed church invitation, **Joy gift registry**, contacts, **church RSVP** (`/rsvp`) and **wishes** (guests leave a message; it shows once approved). No traditional-wedding details. |
+| `sarahanddamilare.dabioye.com/admin` | You two + planners | Invitation desk (guest list, WhatsApp sending, sent → opened → RSVP → arrived tracking, church RSVPs, CSV import/export), **Wishes** (`/admin/wishes`: approve, hide or delete guests' messages) and **Edit website**. |
 | `oluwabioye.dabioye.com` | Invited guests | Front page asks for the **6-character invitation code** (with "Remember me on this device"). Nothing about the event shows without a code. |
 | `oluwabioye.dabioye.com/i/CODE` | One guest | Their traditional wedding & reception invitation with their name on the card, RSVP, QR **access card** and **driver meal card**. |
 | `oluwabioye.dabioye.com/checkin` | Ushers | Gate check-in: scan the QR or search a name. Ushers can't see the guest list. |
@@ -91,6 +91,7 @@ Sign in at `/admin` → **Edit website**. From your phone you can:
 - write Our Story (moments with dates, text and photos; reorder or delete)
 - set the Joy registry link and message, RSVP deadline (shown on private invitations), notes for church guests
 - turn the wax-seal opening on or off
+- open or close the church RSVP at `/rsvp`
 
 Changes go live within about a minute (the pages cache the content briefly). `functions/src/config.js` still holds the fixed details (names, venues, times) and the defaults.
 
