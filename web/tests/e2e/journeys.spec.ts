@@ -69,11 +69,15 @@ test('church guests RSVP on the website and the couple sees who is expected', as
   await expect(page.getByRole('heading', { name: 'Thank you, Yemi' })).toBeVisible();
   await expect(page.getByText('all 3 of you')).toBeVisible();
 
-  await page.goto(`${PUBLIC}/admin`);
+  // On a page of their own, apart from the private invitations on the desk.
+  await page.goto(`${PUBLIC}/admin/church`);
   await page.getByLabel('Password').fill('test-admin');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  const church = page.locator('#church');
-  await expect(church.getByRole('row', { name: /Yemi Coker/ })).toContainText('Attending');
+  await expect(page.getByRole('row', { name: /Yemi Coker/ })).toContainText('Attending');
+  await expect(page.getByText('Expected people')).toBeVisible();
+  await page.goto(`${PUBLIC}/admin`);
+  await expect(page.getByText('Invitation desk')).toBeVisible();
+  await expect(page.getByText('Yemi Coker')).toHaveCount(0);
 });
 
 test('a wish shows on the website only after the couple approves it', async ({ page }) => {

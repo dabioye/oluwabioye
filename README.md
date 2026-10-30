@@ -5,7 +5,7 @@ Two static websites (Next.js + Tailwind + shadcn/ui) on Firebase Hosting, with o
 | Address | Who | What |
 | --- | --- | --- |
 | `sarahanddamilare.dabioye.com` | **Public** | Church wedding website: ceremony details, directions, add-to-calendar, Our Story, gallery, the printed church invitation, **Joy gift registry**, contacts, **church RSVP** (`/rsvp`) and **wishes** (guests leave a message; it shows once approved). No traditional-wedding details. |
-| `sarahanddamilare.dabioye.com/admin` | You two + planners | Invitation desk (guest list, WhatsApp sending, sent → opened → RSVP → arrived tracking, church RSVPs, CSV import/export), **Wishes** (`/admin/wishes`: approve, hide or delete guests' messages) and **Edit website**. |
+| `sarahanddamilare.dabioye.com/admin` | You two + planners | Invitation desk (guest list, WhatsApp sending, sent → opened → RSVP → arrived tracking, CSV import/export), **Church RSVPs** (`/admin/church`, the public replies, kept apart from the private invitations), **Wishes** (`/admin/wishes`: approve, hide or delete guests' messages) and **Edit website**. |
 | `oluwabioye.dabioye.com` | Invited guests | Front page asks for the **6-character invitation code** (with "Remember me on this device"). Nothing about the event shows without a code. |
 | `oluwabioye.dabioye.com/i/CODE` | One guest | Their traditional wedding & reception invitation with their name on the card, RSVP, QR **access card** and **driver meal card**. |
 | `oluwabioye.dabioye.com/checkin` | Ushers | Gate check-in: scan the QR or search a name. Ushers can't see the guest list. |

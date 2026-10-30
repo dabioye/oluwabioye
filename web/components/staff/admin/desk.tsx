@@ -1,18 +1,17 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, Download, ImageDown, Link2, Mail, MessageCircle, Plus, Send, Trash2, Upload } from 'lucide-react';
+import { Copy, Download, ImageDown, Link2, Mail, MessageCircle, Plus, Send, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api, ApiError } from '@/lib/api';
 import { cfg } from '@/lib/config';
 import { ago, longDate, weekday } from '@/lib/format';
 import { canShareImages, cardFileName, download, preloadCard, renderCard } from '@/lib/card-image';
-import type { Activity, ChurchRsvp, EmailStatus, Guest, Side, SiteSettings, WhatsAppStatus } from '@/lib/types';
+import type { Activity, EmailStatus, Guest, Side, SiteSettings, WhatsAppStatus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { StaffHeader, StaffPage } from '../staff-shell';
 import { GuestDialog } from './guest-dialog';
@@ -21,7 +20,7 @@ import { SendCardDialog } from './send-card-dialog';
 import { WhatsAppSendDialog } from './whatsapp-send-dialog';
 import { activityText, CHANNEL_LABEL, PILL, sendHref, whatsAppHref, type Stage, STAGES, stageOf, WA_TAG } from './model';
 
-type Data = { guests: Guest[]; activity: Activity[]; church: ChurchRsvp[]; inviteUrl: string };
+type Data = { guests: Guest[]; activity: Activity[]; inviteUrl: string };
 
 // Guests invited to the traditional wedding get their personalised card image with the message.
 const getsCard = (g: Guest) => g.events.includes('trad');
@@ -192,12 +191,12 @@ export function Desk() {
         title="Invitation desk"
         subtitle={`${weekday()} ${longDate(cfg.date)} · RSVP by ${longDate(cfg.rsvpBy)}`}
         links={[
+          { href: '/admin/church', label: 'Church RSVPs' },
           { href: '/admin/inbox', label: 'Inbox' },
           { href: '/admin/wishes', label: 'Wishes' },
           { href: '/admin/budget', label: 'Budget' },
           { href: '/admin/site', label: 'Edit website' },
           { href: '/', label: 'Website', external: true },
-          { href: '#church', label: 'Church RSVPs' },
           ...(data ? [{ href: `${data.inviteUrl}/checkin`, label: 'Gate', external: true }] : []),
         ]}
         signOutTo="/admin"
@@ -237,7 +236,7 @@ export function Desk() {
           Printed cards handed over <b>{n((g) => g.cardDelivered)}</b>
         </span>
         <span>
-          Expected at church <b>{n((g) => g.events.includes('church') && g.rsvp === 'yes')}</b>
+          Invited guests attending church <b>{n((g) => g.events.includes('church') && g.rsvp === 'yes')}</b>
         </span>
         <span>
           Expected at reception <b>{n((g) => g.events.includes('trad') && g.rsvp === 'yes')}</b>
@@ -375,8 +374,6 @@ export function Desk() {
       </div>
 
       {wa?.configured && <WhatsAppPanel wa={wa} />}
-
-      <ChurchRsvps rows={data?.church ?? []} onChanged={refresh} />
 
       <GuestDialog open={editing !== undefined} guest={editing ?? null} groups={groups} onClose={() => setEditing(undefined)} onSaved={refresh} />
       {wa && <WhatsAppSendDialog guests={waSending} wa={wa} render={cardFor} onProgress={refresh} onClose={() => setWaSending(null)} />}
@@ -547,99 +544,6 @@ function WhatsAppPanel({ wa }: { wa: WhatsAppStatus }) {
             ))}
           </ul>
         )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ChurchRsvps({ rows, onChanged }: { rows: ChurchRsvp[]; onChanged: () => void }) {
-  const [armed, setArmed] = useState<string | null>(null);
-  const yes = rows.filter((r) => r.attending === 'yes');
-  const people = yes.reduce((s, r) => s + (Number(r.party) || 0), 0);
-  const sorted = [...rows].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-  return (
-    <Card id="church" className="mt-4 scroll-mt-4 gap-3 border-hairline-soft bg-navy-2/60 py-4">
-      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 px-4">
-        <CardTitle className="ui-caps text-[0.72rem] text-ivory-dim">Church wedding · public RSVPs</CardTitle>
-        <Button asChild size="sm" variant="outline" className="border-gold/40 bg-transparent text-gold">
-          <a href="/api/admin/church.csv">
-            <Download /> Export
-          </a>
-        </Button>
-      </CardHeader>
-      <CardContent className="grid gap-2 px-4">
-        <p className="m-0 flex flex-wrap gap-x-6 text-[0.82rem] text-ivory-dim [&_b]:text-ivory">
-          <span>
-            Replies <b>{rows.length}</b>
-          </span>
-          <span>
-            Attending <b>{yes.length}</b>
-          </span>
-          <span>
-            Expected people <b>{people}</b>
-          </span>
-          <span>
-            Declined <b>{rows.length - yes.length}</b>
-          </span>
-        </p>
-        <Table>
-          <TableHeader>
-            <TableRow className="border-hairline-soft">
-              {['Name', 'Phone', 'Reply', 'Party', 'Note', 'When', ''].map((h) => (
-                <TableHead key={h} className="text-[0.7rem] tracking-[0.14em] text-ivory-dim uppercase">
-                  {h}
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sorted.length ? (
-              sorted.map((r) => (
-                <TableRow key={r.id} className="border-hairline-soft">
-                  <TableCell>
-                    {r.name}
-                    {r.email && <small className="block text-ivory-dim">{r.email}</small>}
-                  </TableCell>
-                  <TableCell className="tabular-nums">{r.phone}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={r.attending === 'yes' ? PILL.yes.className : PILL.no.className}>
-                      {r.attending === 'yes' ? 'Attending' : 'Declined'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="tabular-nums">{r.attending === 'yes' ? r.party : '–'}</TableCell>
-                  <TableCell className="max-w-[260px] whitespace-normal text-ivory-dim">{r.note}</TableCell>
-                  <TableCell className="text-ivory-dim">{ago(r.updatedAt || r.createdAt)}</TableCell>
-                  <TableCell>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-bad hover:bg-bad/10 hover:text-bad"
-                      aria-label={`Remove ${r.name}`}
-                      onClick={async () => {
-                        if (armed !== r.id) {
-                          setArmed(r.id);
-                          setTimeout(() => setArmed((a) => (a === r.id ? null : a)), 3000);
-                          return;
-                        }
-                        await api(`/api/admin/church/${encodeURIComponent(r.id)}`, { method: 'DELETE' });
-                        toast.success('Removed');
-                        onChanged();
-                      }}
-                    >
-                      <Trash2 /> {armed === r.id ? 'Confirm' : 'Remove'}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={7} className="py-6 text-center text-ivory-dim">
-                  No church RSVPs yet. Guests reply at /rsvp on the website (you can close it in Edit website).
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
       </CardContent>
     </Card>
   );

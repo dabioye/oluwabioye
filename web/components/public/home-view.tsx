@@ -222,9 +222,9 @@ export function HomeView() {
           )}
         </Frame>
 
-        <Wishes />
-
         <Registry content={content} />
+
+        <Wishes />
 
         <section className="pt-2.5 pb-5 text-center">
           <div className="eyebrow">Questions</div>

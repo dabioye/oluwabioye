@@ -78,6 +78,7 @@ export function WishesDesk() {
         subtitle={pending ? `${pending} waiting for approval` : 'Messages from the website'}
         links={[
           { href: '/admin', label: 'Invitation desk' },
+          { href: '/admin/church', label: 'Church RSVPs' },
           { href: '/admin/inbox', label: 'Inbox' },
           { href: '/#wishes', label: 'View on website', external: true },
         ]}

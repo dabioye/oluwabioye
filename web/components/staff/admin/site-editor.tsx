@@ -425,7 +425,9 @@ export function SiteEditor() {
                 Take RSVPs for the church wedding on the website (/rsvp)
                 <Switch checked={s.churchRsvpOpen !== false} onCheckedChange={(churchRsvpOpen) => update((x) => ({ ...x, churchRsvpOpen }))} />
               </label>
-              <p className="m-0 text-[0.8rem] text-ivory-dim">Replies appear under Church RSVPs on the invitation desk. Turn this off to close the RSVP.</p>
+              <p className="m-0 text-[0.8rem] text-ivory-dim">
+                Replies appear on the Church RSVPs page (/admin/church), separate from the private invitations. Turn this off to close the RSVP.
+              </p>
             </fieldset>
             <fieldset className="grid gap-3">
               <legend className="mb-2 text-[0.72rem] tracking-[0.12em] text-ivory-dim uppercase">Wax-seal opening</legend>

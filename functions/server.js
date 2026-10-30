@@ -292,8 +292,10 @@ const guestOr404 = async (req, res) => {
   return g;
 };
 api.get('/guests', wrap(async (req, res) => {
-  const [guests, activity, church] = await Promise.all([store.all(), store.activity(60), store.publicRsvps()]);
-  res.json({ guests: guests.map(publicGuest), activity, church, baseUrl: BASE_URL(), inviteUrl: INVITE_URL() });
+  const [guests, activity] = await Promise.all([store.all(), store.activity(80)]);
+  // The desk is the private invitations: public church RSVPs and wishes have their own pages.
+  const own = activity.filter((x) => !['church', 'wish'].includes(x.type)).slice(0, 60);
+  res.json({ guests: guests.map(publicGuest), activity: own, baseUrl: BASE_URL(), inviteUrl: INVITE_URL() });
 }));
 api.post('/guests', wrap(async (req, res) => {
   let g;
@@ -354,6 +356,8 @@ api.get('/export.csv', wrap(async (req, res) => {
   const all = await store.all();
   res.type('text/csv').set('Content-Disposition', 'attachment; filename="traditional-guests.csv"').send(toCsv(all.map((g) => ({ ...g, link: inviteLink(g), events: g.events.join(' ') }))));
 }));
+// Public church RSVPs (/rsvp), kept apart from the private invitations on the desk.
+api.get('/church', wrap(async (req, res) => res.json({ church: await store.publicRsvps() })));
 api.get('/church.csv', wrap(async (req, res) => {
   const rows = await store.publicRsvps();
   res.type('text/csv').set('Content-Disposition', 'attachment; filename="church-rsvps.csv"')
