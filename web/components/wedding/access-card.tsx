@@ -4,20 +4,38 @@ import { WaxSeal } from './wax-seal';
 import { Wordmark } from './wordmark';
 
 /** The guest's access card (with the QR the ushers scan), or the driver's meal card. */
-export function AccessCard({ name, code, qrSvg, driver = false }: { name: string; code: string; qrSvg?: string; driver?: boolean }) {
+export function AccessCard({
+  name,
+  code,
+  qrSvg,
+  driver = false,
+  honour = '',
+}: {
+  name: string;
+  code: string;
+  qrSvg?: string;
+  driver?: boolean;
+  /** A guest of honour's role on the day, shown under their name. */
+  honour?: string;
+}) {
+  const honoured = !driver && !!honour;
   return (
     <div
       className={cn(
         'relative mx-auto mt-5 w-full max-w-[380px] rounded-xl border border-gold-soft px-5 pt-6 pb-5 text-center shadow-[0_18px_40px_rgb(0_0_0/0.35)]',
         driver ? 'bg-navy-3' : 'bg-navy-2',
+        honoured && 'border-2 border-gold ring-1 ring-gold/40 ring-offset-4 ring-offset-navy',
       )}
     >
       <WaxSeal className="mx-auto w-16" />
       <div className="eyebrow mt-3">The making of</div>
       <Wordmark className="mx-auto mt-2 w-[min(70vw,250px)] text-ivory" />
       <div className="eyebrow mt-1">{shortDate()}</div>
-      <div className="mt-3 font-ui text-[0.78rem] font-semibold tracking-[0.3em] text-gold uppercase">{driver ? 'Driver’s meal card' : 'Access card'}</div>
+      <div className="mt-3 font-ui text-[0.78rem] font-semibold tracking-[0.3em] text-gold uppercase">
+        {driver ? 'Driver’s meal card' : honoured ? 'Guest of honour' : 'Access card'}
+      </div>
       <div className="mt-2 font-display text-xl leading-tight font-medium">{driver ? `Driver of ${name}` : name}</div>
+      {honoured && <div className="mt-1 font-script text-[1.6rem] leading-tight text-gold-bright">{honour}</div>}
       {driver ? (
         <p className="mt-2 mb-0 font-ui text-[0.78rem] text-ivory-dim">Present at the drivers’ meal point</p>
       ) : (

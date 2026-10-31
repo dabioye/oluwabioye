@@ -20,7 +20,18 @@ export type PublicContent = {
 };
 
 /** A guest as their own invitation sees them. */
-export type InviteGuest = { name: string; code: string; events: EventKey[]; rsvp: Rsvp; rsvpNote: string; driverCard: boolean };
+export type InviteGuest = {
+  name: string;
+  code: string;
+  events: EventKey[];
+  rsvp: Rsvp;
+  rsvpNote: string;
+  driverCard: boolean;
+  /** Their role on the day ("Chairman of the Day"), if any. */
+  honour: string;
+  /** A personal message from the couple on their invitation, if any. */
+  greeting: string;
+};
 export type InviteData = {
   guest: InviteGuest;
   qrSvg: string;
@@ -60,6 +71,9 @@ export type Guest = {
   channel: Channel;
   table: string;
   notes: string;
+  /** Role on the day and personal message (guests added before these existed have neither). */
+  honour?: string;
+  greeting?: string;
   cardDelivered: boolean;
   sentAt: string | null;
   openedAt: string | null;

@@ -33,6 +33,8 @@ type Form = {
   channel: Channel;
   table: string;
   notes: string;
+  honour: string;
+  greeting: string;
   events: EventKey[];
   driverCard: boolean;
   cardDelivered: boolean;
@@ -48,6 +50,8 @@ const blank: Form = {
   channel: 'whatsapp',
   table: '',
   notes: '',
+  honour: '',
+  greeting: '',
   events: ['church', 'trad'],
   driverCard: false,
   cardDelivered: false,
@@ -95,6 +99,8 @@ function GuestForm({ open, guest, groups, onClose, onSaved }: Props) {
       channel: f.channel,
       table: f.table,
       notes: f.notes,
+      honour: f.honour,
+      greeting: f.greeting,
       events: f.events,
       driverCard: f.driverCard,
       cardDelivered: f.cardDelivered,
@@ -224,6 +230,28 @@ function GuestForm({ open, guest, groups, onClose, onSaved }: Props) {
                   <Checkbox checked={f.cardDelivered} onCheckedChange={(v) => set('cardDelivered', v === true)} /> Printed access card handed over
                 </label>
               </fieldset>
+              <Field label="Role on the day (optional)" htmlFor="g-honour" wide>
+                <Input
+                  id="g-honour"
+                  maxLength={60}
+                  placeholder="Chairman of the Day, Chief Host, Mother of the Day…"
+                  value={f.honour}
+                  onChange={(e) => set('honour', e.target.value)}
+                />
+              </Field>
+              <Field label="Personal message on their invitation (optional)" htmlFor="g-greeting" wide>
+                <Textarea
+                  id="g-greeting"
+                  rows={3}
+                  maxLength={600}
+                  placeholder="Dear Sir, thank you for honouring us…"
+                  value={f.greeting}
+                  onChange={(e) => set('greeting', e.target.value)}
+                />
+                <span className="text-[0.78rem] text-ivory-dim">
+                  The role shows on their invitation, access card and the gate screen. The message shows only on their invitation. Notes below stay private.
+                </span>
+              </Field>
               <Field label="Notes" htmlFor="g-notes" wide>
                 <Textarea id="g-notes" rows={2} value={f.notes} onChange={(e) => set('notes', e.target.value)} />
               </Field>

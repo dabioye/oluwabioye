@@ -9,7 +9,7 @@ const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const randomCode = () => Array.from(crypto.randomBytes(6), (b) => ALPHABET[b % ALPHABET.length]).join('');
 const now = () => new Date().toISOString();
 
-const FIELDS = ['name', 'phone', 'email', 'side', 'group', 'events', 'driverCard', 'channel', 'notes', 'table', 'cardDelivered'];
+const FIELDS = ['name', 'phone', 'email', 'side', 'group', 'events', 'driverCard', 'channel', 'notes', 'table', 'cardDelivered', 'honour', 'greeting'];
 const toBool = (v) => v === true || /^(1|true|yes|y)$/i.test(String(v ?? '').trim());
 
 function clean(input) {
@@ -21,6 +21,9 @@ function clean(input) {
   if (out.group !== undefined) out.group = String(out.group).trim().slice(0, 60);
   if (out.notes !== undefined) out.notes = String(out.notes).slice(0, 500);
   if (out.table !== undefined) out.table = String(out.table).slice(0, 20);
+  // A role on the day ("Chairman of the Day") and a personal message, both shown on their invitation.
+  if (out.honour !== undefined) out.honour = String(out.honour).trim().slice(0, 60);
+  if (out.greeting !== undefined) out.greeting = String(out.greeting).trim().slice(0, 600);
   if (out.side !== undefined && !['bride', 'groom', 'both'].includes(out.side)) out.side = 'both';
   if (out.channel !== undefined && !['whatsapp', 'email', 'physical', 'sms'].includes(out.channel)) out.channel = 'whatsapp';
   if (out.events !== undefined) {
@@ -40,6 +43,7 @@ function newGuest(input, code) {
     id: crypto.randomUUID(), code, name: d.name, phone: d.phone || '', email: d.email || '',
     side: d.side || 'both', group: d.group || '', events: d.events || ['church', 'trad'],
     driverCard: d.driverCard || false, channel: d.channel || 'whatsapp', table: d.table || '', notes: d.notes || '',
+    honour: d.honour || '', greeting: d.greeting || '',
     cardDelivered: d.cardDelivered || false, sentAt: null, openedAt: null, openCount: 0,
     rsvp: 'pending', rsvpAt: null, rsvpNote: '', checkedInAt: null, createdAt: now(),
   };

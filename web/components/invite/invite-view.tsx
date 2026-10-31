@@ -70,6 +70,7 @@ export function InviteView() {
         <span className="min-h-[1.3em] font-script text-[clamp(2.2rem,9vw,3.2rem)] leading-tight text-gold-bright [text-shadow:0_2px_10px_rgb(0_0_0/0.6)]">
           {guest ? guest.name : 'you'}
         </span>
+        {guest?.honour && <span className="ui-caps text-[0.8rem] tracking-[0.3em] text-ivory [text-shadow:0_2px_8px_rgb(0_0_0/0.7)]">{guest.honour}</span>}
       </Intro>
 
       {data && guest && (
@@ -92,6 +93,7 @@ export function InviteView() {
 
             {/* The RSVP comes first: it's what a guest opening the seal needs to do. */}
             <Frame id="respond" className="mt-[clamp(12px,3vw,24px)] scroll-mt-16">
+              <Honour guest={guest} />
               <h2 className="display mb-3 text-[clamp(1.25rem,3.6vw,1.6rem)] tracking-[0.18em] uppercase">
                 {guest.rsvp === 'pending' ? 'Send RSVP' : 'Your RSVP'}
               </h2>
@@ -171,6 +173,11 @@ export function InviteView() {
   );
 }
 
+// "Dear Tope", but "Dear Mr. Tope Omidiji" rather than "Dear Mr." when the name starts with a title.
+const TITLES =
+  /^(mr|mrs|ms|miss|dr|prof|chief|engr|pastor|rev|revd|hon|sir|dame|alhaji|alhaja|barr|arc|pst|evang|deacon|deaconess|elder|otunba|oba|hrh|mazi|lady|bishop|apostle|prince|princess|col|gen|capt|maj|lt|sgt|cmdr|amb|senator|sen)\.?$/i;
+const dearName = (name: string) => (TITLES.test(name.split(/\s+/)[0]) ? name.trim() : name.split(/\s+/)[0]);
+
 function RsvpBlock({ guest, qrSvg, rsvpBy, onSaved }: { guest: InviteGuest; qrSvg: string; rsvpBy: string; onSaved: (g: InviteGuest) => void }) {
   const [changing, setChanging] = useState(false);
   const save = async (response: 'yes' | 'no', note: string) => {
@@ -182,7 +189,7 @@ function RsvpBlock({ guest, qrSvg, rsvpBy, onSaved }: { guest: InviteGuest; qrSv
   if (guest.rsvp === 'pending')
     return (
       <>
-        <p className="lede mx-auto mt-1 max-w-[30em]">Dear {guest.name.split(/\s+/)[0]}, will you join us?</p>
+        <p className="lede mx-auto mt-1 max-w-[30em]">{guest.greeting ? 'Will you join us?' : `Dear ${dearName(guest.name)}, will you join us?`}</p>
         <div className="eyebrow mt-3">Kindly respond by {longDate(rsvpBy)}</div>
         <RsvpForm guest={guest} onSubmit={save} footnote="Your response helps us properly plan for you as our most esteemed guest." />
       </>
@@ -199,7 +206,7 @@ function RsvpBlock({ guest, qrSvg, rsvpBy, onSaved }: { guest: InviteGuest; qrSv
         <>
           <p className="lede mt-3.5">You’re on the list. Save this card to your phone (a screenshot works) and show it at the entrance.</p>
           <div id="card" className="scroll-mt-24">
-            <AccessCard name={guest.name} code={guest.code} qrSvg={qrSvg} />
+            <AccessCard name={guest.name} code={guest.code} qrSvg={qrSvg} honour={guest.honour} />
           </div>
           {guest.driverCard && <AccessCard name={guest.name} code={guest.code} driver />}
         </>
@@ -220,6 +227,29 @@ function RsvpBlock({ guest, qrSvg, rsvpBy, onSaved }: { guest: InviteGuest; qrSv
         )}
       </div>
     </>
+  );
+}
+
+/** For a guest of honour: their role on the day and the couple's personal message, above their RSVP. */
+function Honour({ guest }: { guest: InviteGuest }) {
+  if (!guest.honour && !guest.greeting) return null;
+  return (
+    <div className="mb-7 border-b border-hairline-soft pb-7">
+      {guest.honour && (
+        <>
+          <div className="eyebrow">With honour</div>
+          <p className="m-0 mt-1 font-script text-[clamp(2rem,7vw,2.7rem)] leading-tight text-gold-bright">{guest.honour}</p>
+        </>
+      )}
+      {guest.greeting && (
+        <>
+          <p className="lede mx-auto mt-4 mb-0 max-w-[32em] whitespace-pre-line italic">{guest.greeting}</p>
+          <p className="ui-caps mt-3 mb-0 text-[0.7rem] tracking-[0.2em] text-gold">
+            {c.bride} &amp; {c.groom}
+          </p>
+        </>
+      )}
+    </div>
   );
 }
 
