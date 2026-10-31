@@ -178,6 +178,30 @@ test('guest enters their code, is remembered, RSVPs and gets their access card',
   await expect(page.getByLabel('Enter your invitation code')).toBeVisible();
 });
 
+test('a guest of honour sees their role and the couple’s message, on the invitation, the card and at the gate', async ({ page, request }) => {
+  const g = await addGuest(request, {
+    name: 'Chief Adebayo Ogun',
+    phone: '08066666666',
+    honour: 'Chairman of the Day',
+    greeting: 'Dear Sir, thank you for honouring us as our Chairman.',
+  });
+  await skipIntro(page);
+  await page.goto(`${INVITE}/i/${g.code}`);
+  const respond = page.locator('#respond');
+  await expect(respond.getByText('Chairman of the Day')).toBeVisible();
+  await expect(respond).toContainText('Dear Sir, thank you for honouring us as our Chairman.');
+  await page.getByRole('button', { name: 'Joyfully Accept' }).click();
+  await expect(page.locator('#card').getByText('Guest of honour')).toBeVisible();
+  await expect(page.locator('#card').getByText('Chairman of the Day')).toBeVisible();
+
+  await page.goto(`${INVITE}/checkin`);
+  await page.getByLabel('PIN').fill('4321');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByLabel('Invitation code or guest name').fill(g.code);
+  await page.getByLabel('Invitation code or guest name').press('Enter');
+  await expect(page.getByText('Chairman of the Day · please escort')).toBeVisible();
+});
+
 test('an unknown invitation link explains what to do', async ({ page }) => {
   await skipIntro(page);
   await page.goto(`${INVITE}/i/YYY333`);

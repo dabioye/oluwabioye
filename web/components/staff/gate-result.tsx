@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { clock } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-export type GateGuest = { name: string; code: string; table?: string; driverCard?: boolean };
+export type GateGuest = { name: string; code: string; table?: string; driverCard?: boolean; honour?: string };
 export type GateResult = { status: 'ok' | 'repeat' | 'declined' | 'missing' | 'undone'; guest?: GateGuest; already?: string; code?: string };
 
 const TONE = {
@@ -34,6 +34,11 @@ export function GateResultPanel({ res, onUndo }: { res: GateResult; onUndo?: () 
       <Icon className={cn('mx-auto size-10', text)} aria-hidden />
       <b className={cn('mt-2 block font-display text-[1.7rem] font-medium', text)}>{title}</b>
       <p className="m-0 mt-1 text-lg text-ivory">{body}</p>
+      {res.status === 'ok' && g?.honour && (
+        <p className="ui-caps m-0 mt-2 inline-block rounded-xl border border-gold px-4 py-1.5 text-[0.8rem] tracking-[0.18em] text-gold">
+          {g.honour} · please escort
+        </p>
+      )}
       {res.status === 'ok' && extra && <p className="m-0 mt-1 text-ivory-dim">{extra}</p>}
       {res.status === 'ok' && onUndo && (
         <Button variant="outline" size="sm" className="mt-3 border-gold/50 bg-transparent text-gold" onClick={onUndo}>

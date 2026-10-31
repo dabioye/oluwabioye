@@ -104,7 +104,7 @@ const message = (g) =>
   cfg.inviteMessage.replaceAll('{name}', g.name).replaceAll('{link}', inviteLink(g)).replaceAll('{weekday}', weekday()).replaceAll('{rsvpBy}', longDate(cfg.rsvpBy));
 const publicGuest = (g) => ({ ...g, link: inviteLink(g), message: message(g) });
 // What a guest sees about themselves on their invitation.
-const inviteGuest = (g) => ({ name: g.name, code: g.code, events: g.events, rsvp: g.rsvp, rsvpNote: g.rsvpNote, driverCard: !!g.driverCard });
+const inviteGuest = (g) => ({ name: g.name, code: g.code, events: g.events, rsvp: g.rsvp, rsvpNote: g.rsvpNote, driverCard: !!g.driverCard, honour: g.honour || '', greeting: g.greeting || '' });
 whatsapp.setValues(async (g) => ({ name: g.name, first: g.name.split(/\s+/)[0], code: g.code, link: inviteLink(g), rsvpBy: longDate((await content.current()).rsvpBy) }));
 whatsapp.setInboxLink((thread) => `${BASE_URL()}/admin/inbox?thread=${encodeURIComponent(thread)}`);
 // Guests' personalised cards for sends that don't come from the desk, drawn on the server the same way.

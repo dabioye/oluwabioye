@@ -410,6 +410,7 @@ function GuestRow({
   const href = sendHref(g);
   const meta = [g.group, g.side === 'bride' ? 'Bride' : g.side === 'groom' ? 'Groom' : 'Shared', g.phone, g.code].filter(Boolean).join(' · ');
   const tags = [
+    g.honour,
     g.driverCard && 'Driver',
     g.events.length === 1 && (g.events[0] === 'church' ? 'Church only' : 'Reception only'),
     g.cardDelivered && 'Card given',

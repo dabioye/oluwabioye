@@ -8,6 +8,8 @@ const ALIASES = {
   category: 'group', relationship: 'group',
   event: 'events', invited: 'events',
   'table no': 'table', 'table number': 'table',
+  honor: 'honour', role: 'honour', 'role on the day': 'honour', title: 'honour',
+  message: 'greeting', 'personal message': 'greeting',
 };
 
 function rowsOf(text) {
@@ -42,7 +44,7 @@ function parseCsv(text) {
   return rows.slice(1).map((r) => Object.fromEntries(head.map((h, i) => [h, (r[i] || '').trim()])));
 }
 
-const COLS = ['name', 'code', 'phone', 'email', 'side', 'group', 'events', 'driverCard', 'channel', 'table', 'sentAt', 'openedAt', 'openCount', 'rsvp', 'rsvpAt', 'rsvpNote', 'cardDelivered', 'checkedInAt', 'notes', 'link'];
+const COLS = ['name', 'code', 'phone', 'email', 'side', 'group', 'events', 'driverCard', 'channel', 'table', 'sentAt', 'openedAt', 'openCount', 'rsvp', 'rsvpAt', 'rsvpNote', 'cardDelivered', 'checkedInAt', 'notes', 'honour', 'greeting', 'link'];
 function toCsv(items, cols = COLS) {
   const q = (v) => {
     let s = v === null || v === undefined ? '' : String(v);

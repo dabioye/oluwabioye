@@ -73,6 +73,7 @@ const store = require('../src/store');
   let inv = await r.json();
   assert.equal(inv.guest.name, 'Tope Omidiji');
   assert.equal(inv.guest.phone, undefined, 'contact details are not sent to the invitation page');
+  assert.equal(inv.guest.honour, '', 'no role on the day unless the couple set one');
   assert(inv.qrSvg.startsWith('<svg'));
   assert.equal(inv.invite.art, '/img/invite-trad.jpg');
   assert.equal(typeof inv.invite.codeSlot.top, 'number', 'card says where to write the access code');
@@ -83,6 +84,15 @@ const store = require('../src/store');
   assert.equal(inv.guest.driverCard, true);
   r = await req('/api/invite/' + g.code, { headers: guestIp });
   assert.equal(r.status, 200);
+
+  // A guest of honour: their role and the couple's personal message reach their invitation, trimmed and capped.
+  r = await req(`/api/admin/guests/${g.id}`, json('PATCH', { honour: '  Chairman of the Day  ', greeting: 'x'.repeat(700) }, admin));
+  assert.equal(r.status, 200);
+  inv = await (await req('/api/invite/' + g.code, { headers: guestIp })).json();
+  assert.equal(inv.guest.honour, 'Chairman of the Day');
+  assert.equal(inv.guest.greeting.length, 600);
+  assert.equal(inv.guest.notes, undefined, 'private notes stay private');
+  await req(`/api/admin/guests/${g.id}`, json('PATCH', { honour: '', greeting: '' }, admin));
 
   // Wrong codes are limited per visitor (10 per 15 minutes); other visitors are unaffected
   const guesser = { 'X-Forwarded-For': '10.9.9.9' };
@@ -111,7 +121,7 @@ const store = require('../src/store');
   r = await req('/api/admin/guests', { headers: { cookie: admin } });
   const d = await r.json();
   const t = d.guests.find((x) => x.code === g.code);
-  assert(t.openedAt && t.openCount === 3 && t.checkedInAt && t.rsvp === 'yes');
+  assert(t.openedAt && t.openCount === 4 && t.checkedInAt && t.rsvp === 'yes');
   assert.equal(d.church, undefined, 'church RSVPs are kept off the desk');
   assert.equal((await (await req('/api/admin/church', { headers: { cookie: admin } })).json()).church.length, 1);
   assert.equal((await req('/api/admin/church')).status, 401);
