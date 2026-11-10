@@ -86,10 +86,15 @@ export function download(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-/** Phones can share an image together with text to WhatsApp; most desktop browsers can't. */
+/**
+ * Share the card from the share sheet only on phones and tablets. Desktop Chrome (from v156 on a Mac) can
+ * share files too, but there the card is better downloaded and attached in WhatsApp Web or Desktop.
+ */
 export function canShareImages() {
   try {
-    return !!navigator.canShare?.({ files: [new File([''], 'card.jpg', { type: 'image/jpeg' })] });
+    const nav = navigator as Navigator & { userAgentData?: { mobile: boolean } };
+    const handheld = !!nav.userAgentData?.mobile || matchMedia('(pointer: coarse)').matches;
+    return handheld && !!navigator.canShare?.({ files: [new File([''], 'card.jpg', { type: 'image/jpeg' })] });
   } catch {
     return false;
   }

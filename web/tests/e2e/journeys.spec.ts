@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { chromium, expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { chromium, devices, expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import QRCode from 'qrcode';
 import sharp from 'sharp';
 import { INVITE, META, PUBLIC } from '../../playwright.config';
@@ -292,6 +292,40 @@ test('sending on WhatsApp from a phone opens the guest’s chat with the message
   expect(shared[0].text).toBeUndefined();
   expect(shared[0].files[0]).toMatchObject({ name: 'Invitation - Funke Bello.jpg', type: 'image/jpeg' });
   expect(shared[0].files[0].size).toBeGreaterThan(50_000);
+});
+
+// The suite runs as a Pixel 7; this one is a computer.
+test.describe('on a computer', () => {
+  const { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch } = devices['Desktop Chrome'];
+  test.use({ viewport, userAgent, deviceScaleFactor, isMobile, hasTouch });
+
+  test('on a computer, sending on WhatsApp opens the chat and downloads the card to attach, even where the browser can share files', async ({
+    page,
+    request,
+  }) => {
+    await addGuest(request, { name: 'Wale Johnson', phone: '08012121212' });
+    await page.route('**/api/admin/whatsapp*', (r) => r.fulfill({ json: { configured: false, ready: false } }));
+    // Desktop Chrome (v156 on a Mac) says it can share files; the desk should still download the card there.
+    await page.addInitScript(() => {
+      const w = window as unknown as { opened: string[] };
+      w.opened = [];
+      window.open = (url?: string | URL) => (w.opened.push(String(url)), null);
+      Object.assign(navigator, { canShare: () => true, share: async () => {} });
+    });
+    await page.goto(`${PUBLIC}/admin`);
+    await page.getByLabel('Password').fill('test-admin');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    const row = page
+      .locator('div', { hasText: 'Wale Johnson' })
+      .filter({ has: page.getByRole('button', { name: /Send · WhatsApp/ }) })
+      .last();
+    const download = page.waitForEvent('download');
+    await row.getByRole('button', { name: /Send · WhatsApp/ }).click();
+    expect((await download).suggestedFilename()).toBe('Invitation - Wale Johnson.jpg');
+    await expect(page.getByText('Card downloaded. Attach it in the WhatsApp chat that just opened.')).toBeVisible();
+    await expect(page.getByRole('dialog', { name: /Now send Wale’s card/ })).toBeHidden();
+    expect(await page.evaluate(() => (window as unknown as { opened: string[] }).opened)).toHaveLength(1);
+  });
 });
 
 test('with WhatsApp Business, the desk sends each guest their card and message from the couple’s number', async ({ page, request }) => {
