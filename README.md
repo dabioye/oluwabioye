@@ -194,6 +194,15 @@ The budget and expenses page is for the two of you only. It needs the admin pass
 - **Funds received** tracks money coming in: your savings, and gifts or contributions from family and friends. Record who it's from, what was promised and what has arrived. The page then shows funds in hand (received, less what's paid) and how much is still to raise for the payments left, after counting promises. Its own export button downloads the funds as CSV.
 - Forgot the passcode? Delete the document `private/budget-lock` in the Firebase console (Firestore). The budget is kept, and the next visit asks you to choose a new passcode.
 
+## Church invitations for people and groups (`/admin/church-cards`)
+
+The church wedding is open to all, so its card has no code. In **Church invitations** (top of the invitation desk), add a person or a group, e.g. "Mr & Mrs Adeyemi" or "RCCG Youth Choir", one at a time or several at once (one per line: `name, phone`). Their name is written in the box on the church card (`web/site-assets/public/img/church-card.jpg`).
+
+- **WhatsApp** opens their chat with the message: the date, time, venue, the website and its RSVP. With no number, you pick the chat or group in WhatsApp. Then the card follows: on a phone tap **Share card**, on a computer it is downloaded to attach. The invitation is then marked sent.
+- **Card** saves or shares the card on its own; the copy button copies the message.
+- They aren't added to the invitation desk, so its numbers stay the private (traditional) invitations. Replies come through the public RSVP (**Church RSVPs**).
+- If the name sits too high or low on a new card design, adjust `churchCard.nameSlot` in `functions/src/config.js`. The message is `churchMessage` there.
+
 ## Email invitations
 
 Guests with an email address can get their invitation by email: their personalised card, the invitation message and a **View your invitation & RSVP** button.

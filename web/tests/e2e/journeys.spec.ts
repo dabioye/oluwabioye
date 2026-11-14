@@ -599,3 +599,53 @@ test('the budget needs the couple’s own passcode on top of the admin password'
   await expect(page.getByRole('list', { name: 'Funds received' })).toContainText('Mum & Dad');
   expect(browserErrors).toEqual([]);
 });
+
+test('church invitations put a person’s or a group’s name on the church card, with no code', async ({ page, context }) => {
+  const browserErrors: string[] = [];
+  const t = String(Date.now()).slice(-5); // unique names, so a retry on the same data still finds its own
+  page.on('pageerror', (e) => browserErrors.push(e.message));
+  await page.request.post(`${PUBLIC}/api/login`, { data: { kind: 'admin', password: 'test-admin' } });
+  await page.goto(`${PUBLIC}/admin`);
+  await page.getByRole('link', { name: 'Church invitations' }).click();
+  await expect(page).toHaveURL(`${PUBLIC}/admin/church-cards`);
+  await page.getByLabel('Name on the card').fill(`RCCG Youth Choir ${t}`);
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  const list = page.getByRole('list', { name: 'Church invitations' });
+  await expect(list.getByRole('listitem').filter({ hasText: `RCCG Youth Choir ${t}` })).toBeVisible();
+  await page.getByRole('button', { name: 'Add several at once' }).click();
+  await page.getByLabel('One per line: name, phone').fill(`Mr & Mrs Adeyemi ${t}, 0803 123 4567\n\nThe Bello Family ${t}`);
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(list.getByRole('listitem').filter({ hasText: `The Bello Family ${t}` })).toBeVisible();
+  await expect(page.getByLabel('One per line: name, phone')).toHaveValue('');
+  const adeyemi = list.getByRole('listitem').filter({ hasText: `Mr & Mrs Adeyemi ${t}` });
+  await expect(adeyemi).toContainText('0803 123 4567');
+  await expect(adeyemi).toContainText('Not sent');
+
+  // WhatsApp opens their chat with the message (website and RSVP, no private link), and the card follows.
+  let opened = '';
+  await context.route('https://wa.me/**', (r) => {
+    opened = r.request().url();
+    return r.fulfill({ body: 'WhatsApp' });
+  });
+  await adeyemi.getByRole('button', { name: 'WhatsApp' }).click();
+  await expect.poll(() => opened).not.toBe('');
+  const wa = new URL(opened);
+  expect(wa.pathname).toContain('2348031234567');
+  const text = wa.searchParams.get('text') || '';
+  expect(text).toMatch(new RegExp(`^Dear Mr & Mrs Adeyemi ${t},`));
+  expect(text).toContain(`${PUBLIC}/rsvp`);
+  expect(text).not.toContain('/i/');
+  await expect(adeyemi).toContainText(/Sent/);
+
+  // The card is drawn from the church art with the name only.
+  const card = await page.evaluate(async () => {
+    const r = await fetch('/api/admin/church-cards');
+    const d = await r.json();
+    const img = new Image();
+    img.src = d.card.art;
+    await img.decode();
+    return { w: img.naturalWidth, h: img.naturalHeight };
+  });
+  expect(card).toEqual({ w: 1024, h: 1536 });
+  expect(browserErrors).toEqual([]);
+});

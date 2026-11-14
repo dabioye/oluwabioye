@@ -103,6 +103,15 @@ module.exports = {
     codeSlot: { top: 78.9, left: 30.8, size: 3.6 },
   },
 
+  // The church invitation card made for people and groups in the admin (Church invitations). Their name goes in
+  // the box under "Cordially invite"; there is no access code, as the church wedding is open to all.
+  churchCard: {
+    art: '/img/church-card.jpg',
+    // % from top, and largest size in % of card width: the line inside the box.
+    nameSlot: { top: 30.2, maxSize: 6 },
+    ink: '#00193d',
+  },
+
   // Gifts section on the homepage. Shows the registry button plus any accounts listed here.
   gifts: {
     message: 'Your presence is the greatest gift. We are grateful for your love and support.',
@@ -118,6 +127,9 @@ module.exports = {
 
   // WhatsApp Business (Cloud API): the sending number and the approved template. The token is the WHATSAPP_TOKEN secret.
   whatsapp: { phoneNumberId: '1170328419507856', businessAccountId: '27648081441479141', template: 'oluwabioye_invitation' },
+  // Sent with the church card. {rsvp} becomes a line with the RSVP link while the church RSVP is open.
+  churchMessage:
+    'Dear {name},\n\nSarah & Damilare joyfully invite you to their wedding on {weekday}, 17 December 2026 at 10:00 AM, at RCCG Garden of Peace, Region 52 Headquarters, 78/80 Falolu Road, Surulere, Lagos.\n\nDetails and directions: {link}{rsvp}\n\nWe look forward to celebrating with you.',
   inviteMessage:
     'Dear {name},\n\nSarah & Damilare joyfully invite you to The Making of Oluwabioye, our traditional wedding and reception, on {weekday}, 17 December 2026 at 2:00 PM in Lagos.\n\nThis invitation is personal to you. Please don\'t share the link.\nYour invitation, RSVP and access card: {link}\n\nKindly RSVP by {rsvpBy}.\n\n#TheMakingOfOluwabioye',
 };
