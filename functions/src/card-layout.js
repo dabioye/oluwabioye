@@ -14,10 +14,16 @@ const NAME_FONTS = [
 ];
 const nameFont = (family) => NAME_FONTS.find((f) => f.family === family) || NAME_FONTS[0];
 
-/** Long names go on two balanced lines so they stay legible inside the slot. */
+/**
+ * Long names go on two balanced lines so they stay legible inside the slot. A slot can set `wrapAt` (the
+ * longest name kept on one line, 20 by default) and `fit` (the length that still gets the full size, 13 by
+ * default) when it is wider than the traditional card's.
+ */
 function nameLayout(name, slot, family) {
+  const wrapAt = slot.wrapAt || 20;
+  const fit = slot.fit || 13;
   let lines = name ? [name] : [];
-  if (name && name.length > 20 && name.includes(' ')) {
+  if (name && name.length > wrapAt && name.includes(' ')) {
     const mid = name.length / 2;
     const spaces = [...name.matchAll(/ /g)].map((m) => m.index);
     const cut = spaces.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0];
@@ -27,7 +33,7 @@ function nameLayout(name, slot, family) {
   // Two lines must fit between "Cordially invites" and "to", so they are smaller and set tighter.
   const cap = lines.length > 1 ? slot.maxSize * 0.55 : slot.maxSize;
   const lineHeight = lines.length > 1 ? 0.95 : 1.05;
-  const size = name ? Math.min(cap, (slot.maxSize * 13) / Math.max(13, longest)) * nameFont(family).scale : 0;
+  const size = name ? Math.min(cap, (slot.maxSize * fit) / Math.max(fit, longest)) * nameFont(family).scale : 0;
   return { lines, top: slot.top, size, lineHeight, family: nameFont(family).family };
 }
 

@@ -2,7 +2,7 @@
 // with the API (which draws cards for automatic WhatsApp sends), so the two always match.
 import layout from '../../functions/src/card-layout.js';
 
-export type NameSlot = { top: number; maxSize: number };
+export type NameSlot = { top: number; maxSize: number; wrapAt?: number; fit?: number };
 export type CodeSlot = { top: number; left: number; size: number };
 export type NameFont = { family: string; scale: number };
 export type NameLayout = { lines: string[]; top: number; size: number; lineHeight: number; family: string };

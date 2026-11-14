@@ -123,7 +123,7 @@ export type WhatsAppStatus = {
 export type Activity = { at: string; type: string; guestId: string | null; name: string; extra: string };
 /** A church invitation card made for a person or a group (no code: the church wedding is open). */
 export type ChurchCard = { id: string; name: string; phone: string; sentAt: string | null; createdAt: string; message: string };
-export type ChurchCardArt = { art: string; nameSlot: { top: number; maxSize: number }; ink: string };
+export type ChurchCardArt = { art: string; nameSlot: { top: number; maxSize: number; wrapAt?: number; fit?: number }; ink: string };
 
 export type ChurchRsvp = {
   id: string;
