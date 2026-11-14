@@ -171,9 +171,12 @@ function AddCards({ onAdded }: { onAdded: () => void }) {
     try {
       const r = await api<{ cards: ChurchCard[] }>('/api/admin/church-cards', { body: { cards: list } });
       toast.success(r.cards.length === 1 ? `Added ${r.cards[0].name}` : `Added ${r.cards.length} invitations`);
-      setName('');
-      setPhone('');
-      setLines('');
+      // Clear only what was sent, so text typed meanwhile in the other box stays.
+      if (many) setLines('');
+      else {
+        setName('');
+        setPhone('');
+      }
       onAdded();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Couldn’t add');
