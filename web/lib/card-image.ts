@@ -32,9 +32,10 @@ export function preloadCard(src: string, font?: string) {
   fontsReady(nameFont(font).family);
 }
 
-export type CardInput = { src: string; name: string; code: string; nameSlot: NameSlot; codeSlot: CodeSlot; font?: string };
+/** The church card has no access code (`code` and `codeSlot` left out) and dark `ink` on a light card. */
+export type CardInput = { src: string; name: string; code?: string; nameSlot: NameSlot; codeSlot?: CodeSlot; font?: string; ink?: string };
 
-export async function renderCard({ src, name, code, nameSlot, codeSlot, font }: CardInput): Promise<Blob> {
+export async function renderCard({ src, name, code, nameSlot, codeSlot, font, ink }: CardInput): Promise<Blob> {
   const [img] = await Promise.all([loadImage(src), fontsReady(nameFont(font).family)]);
   const W = img.naturalWidth;
   const H = img.naturalHeight;
@@ -43,7 +44,7 @@ export async function renderCard({ src, name, code, nameSlot, codeSlot, font }: 
   c.height = H;
   const x = c.getContext('2d')!;
   x.drawImage(img, 0, 0, W, H);
-  x.fillStyle = CARD_INK;
+  x.fillStyle = ink || CARD_INK;
   x.textAlign = 'center';
   x.textBaseline = 'middle';
 
@@ -51,14 +52,23 @@ export async function renderCard({ src, name, code, nameSlot, codeSlot, font }: 
   const n = nameLayout(name, nameSlot, font);
   const namePx = (n.size / 100) * W;
   x.font = `400 ${namePx}px "${n.family}", cursive`;
-  x.shadowColor = 'rgba(0,0,0,0.5)';
-  x.shadowBlur = namePx * 0.08;
-  x.shadowOffsetY = namePx * 0.03;
+  if (!ink) {
+    // Lifts the light name off the dark traditional card.
+    x.shadowColor = 'rgba(0,0,0,0.5)';
+    x.shadowBlur = namePx * 0.08;
+    x.shadowOffsetY = namePx * 0.03;
+  }
   const step = namePx * n.lineHeight;
   const first = (n.top / 100) * H - ((n.lines.length - 1) * step) / 2;
   n.lines.forEach((line, i) => x.fillText(line, W / 2, first + i * step));
 
   // Access code, letter-spaced like the web card.
+  if (code && codeSlot) drawCode(x, code, codeSlot, W, H);
+
+  return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('Couldn’t create the card image.'))), 'image/jpeg', 0.9));
+}
+
+function drawCode(x: CanvasRenderingContext2D, code: string, codeSlot: CodeSlot, W: number, H: number) {
   const codePx = (codeSlot.size / 100) * W;
   x.font = `500 ${codePx}px "Bodoni Moda", serif`;
   x.textAlign = 'left';
@@ -71,8 +81,6 @@ export async function renderCard({ src, name, code, nameSlot, codeSlot, font }: 
     x.fillText(ch, cx, cy);
     cx += widths[i] + gap;
   });
-
-  return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('Couldn’t create the card image.'))), 'image/jpeg', 0.9));
 }
 
 export const cardFileName = (name: string) => `Invitation - ${name.replace(/[\\/:*?"<>|]+/g, '').trim()}.jpg`;

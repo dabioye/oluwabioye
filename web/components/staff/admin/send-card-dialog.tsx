@@ -5,14 +5,26 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cardFileName, download } from '@/lib/card-image';
-import type { Guest } from '@/lib/types';
 
 /**
  * Second step of a WhatsApp send from a phone. The message has already gone out through the guest's chat
  * (a WhatsApp link can carry text but not an image), so this shares the card on its own; the guest is then
  * at the top of WhatsApp's recent chats. Sharing needs a fresh tap, which is why it is a separate button.
  */
-export function SendCardDialog({ guest, render, onClose }: { guest: Guest | null; render: (g: Guest) => Promise<Blob>; onClose: () => void }) {
+export function SendCardDialog<T extends { id: string; name: string }>({
+  guest,
+  render,
+  onClose,
+  title,
+  description,
+}: {
+  guest: T | null;
+  render: (g: T) => Promise<Blob>;
+  onClose: () => void;
+  /** Instead of the "now send the card" wording, e.g. when only the card is being shared. */
+  title?: string;
+  description?: React.ReactNode;
+}) {
   const [card, setCard] = useState<{ id: string; file: File; url: string } | null>(null);
   const ready = card && guest && card.id === guest.id ? card : null;
 
@@ -49,10 +61,14 @@ export function SendCardDialog({ guest, render, onClose }: { guest: Guest | null
     <Dialog open={!!guest} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Now send {first}’s card</DialogTitle>
+          <DialogTitle>{title ?? `Now send ${first}’s card`}</DialogTitle>
           <DialogDescription>
-            Send the message in the WhatsApp chat that opened, then come back here. Tap <b>Share card</b>, choose WhatsApp, then {guest?.name} (at the top of
-            your recent chats).
+            {description ?? (
+              <>
+                Send the message in the WhatsApp chat that opened, then come back here. Tap <b>Share card</b>, choose WhatsApp, then {guest?.name} (at the top
+                of your recent chats).
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
         <div className="grid place-items-center">

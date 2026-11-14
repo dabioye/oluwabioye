@@ -16,6 +16,7 @@ const budget = require('./src/budget');
 const email = require('./src/email');
 const leads = require('./src/leads');
 const wishes = require('./src/wishes');
+const churchCards = require('./src/church-cards');
 
 const PORT = process.env.PORT || 3000;
 const env = (k) => process.env[k] || '';
@@ -364,6 +365,26 @@ api.get('/church.csv', wrap(async (req, res) => {
     .send(toCsv(rows, ['name', 'phone', 'email', 'attending', 'party', 'note', 'createdAt', 'updatedAt']));
 }));
 api.delete('/church/:id', wrap(async (req, res) => res.json({ ok: await store.removePublicRsvp(req.params.id) })));
+// Church invitation cards for people and groups (no code: the church wedding is open to all).
+const churchMessage = async (name) =>
+  cfg.churchMessage.replaceAll('{name}', name).replaceAll('{weekday}', weekday()).replaceAll('{link}', BASE_URL())
+    .replaceAll('{rsvp}', (await content.current()).churchRsvpOpen === false ? '' : `\nLet us know you’re coming: ${BASE_URL()}/rsvp`);
+const withMessage = async (c) => ({ ...c, message: await churchMessage(c.name) });
+api.get('/church-cards', wrap(async (req, res) => {
+  const cards = await Promise.all((await churchCards.all()).map(withMessage));
+  res.json({ cards, card: cfg.churchCard });
+}));
+api.post('/church-cards', wrap(async (req, res) => {
+  const list = Array.isArray(req.body.cards) ? req.body.cards.slice(0, 300) : [req.body];
+  const { cards, error } = await churchCards.add(list);
+  if (error) return res.status(400).json({ error });
+  res.json({ cards: await Promise.all(cards.map(withMessage)) });
+}));
+api.patch('/church-cards/:id', wrap(async (req, res) => {
+  const c = await churchCards.update(req.params.id, req.body);
+  c ? res.json(await withMessage(c)) : res.status(404).json({ error: 'That invitation is gone' });
+}));
+api.delete('/church-cards/:id', wrap(async (req, res) => res.json({ ok: await churchCards.remove(req.params.id) })));
 api.get('/qr/:id.svg', wrap(async (req, res) => {
   const g = await store.byId(req.params.id);
   if (!g) return res.sendStatus(404);

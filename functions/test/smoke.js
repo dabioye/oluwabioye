@@ -458,6 +458,27 @@ const store = require('../src/store');
   assert.equal((await req(`/api/admin/guests/${g.id}/whatsapp`, { method: 'POST', headers: { cookie: gate } })).status, 401);
   await req('/api/admin/site', json('PUT', { waAutoSend: false }, admin));
 
+  // ---------- church invitation cards for people and groups ----------
+  assert.equal((await req('/api/admin/church-cards')).status, 401, 'admin only');
+  assert.equal((await req('/api/admin/church-cards', json('POST', { name: ' ' }, admin))).status, 400);
+  r = await req('/api/admin/church-cards', json('POST', { cards: [{ name: 'RCCG  Youth Choir' }, { name: 'Aunty Bose', phone: '0803 000 1111' }] }, admin));
+  const made = (await r.json()).cards;
+  assert.deepEqual(made.map((c) => c.name), ['RCCG Youth Choir', 'Aunty Bose']);
+  assert.match(made[0].message, /^Dear RCCG Youth Choir,\n/);
+  assert.match(made[0].message, /Thursday, 17 December 2026 at 10:00 AM/);
+  assert(made[0].message.includes('/rsvp'), 'points to the church RSVP while it is open');
+  assert(!/\/i\//.test(made[0].message), 'no private invitation link');
+  r = await req('/api/admin/church-cards', { headers: { cookie: admin } });
+  let cc = await r.json();
+  assert.deepEqual(cc.cards.map((c) => c.name), ['Aunty Bose', 'RCCG Youth Choir']);
+  assert.equal(cc.card.art, '/img/church-card.jpg');
+  r = await req(`/api/admin/church-cards/${made[1].id}`, json('PATCH', { sent: true }, admin));
+  assert((await r.json()).sentAt, 'marked sent');
+  assert.equal((await req('/api/admin/church-cards/nope', json('PATCH', { sent: true }, admin))).status, 404);
+  assert.equal((await req(`/api/admin/church-cards/${made[0].id}`, { method: 'DELETE', headers: { cookie: admin } })).status, 200);
+  cc = await (await req('/api/admin/church-cards', { headers: { cookie: admin } })).json();
+  assert.deepEqual(cc.cards.map((c) => c.name), ['Aunty Bose']);
+
   // ---------- private budget: admin password, then the couple's own passcode ----------
   const cookieOf = (res) => (res.headers.get('set-cookie') || '').split(';')[0];
   assert.equal((await req('/api/budget/status')).status, 401, 'not for visitors');

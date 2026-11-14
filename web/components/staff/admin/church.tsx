@@ -40,6 +40,7 @@ export function ChurchRsvps() {
         subtitle={`${cfg.events.church.name} · ${weekday()} ${longDate(cfg.date)} · from the website`}
         links={[
           { href: '/admin', label: 'Invitation desk' },
+          { href: '/admin/church-cards', label: 'Church invitations' },
           { href: '/admin/wishes', label: 'Wishes' },
           { href: '/admin/site', label: 'Edit website' },
           { href: '/rsvp', label: 'RSVP page', external: true },
