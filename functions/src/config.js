@@ -107,8 +107,9 @@ module.exports = {
   // the box under "Cordially invite"; there is no access code, as the church wedding is open to all.
   churchCard: {
     art: '/img/church-card.jpg',
-    // % from top, and largest size in % of card width: the line inside the box.
-    nameSlot: { top: 30.2, maxSize: 6 },
+    // % from top, and largest size in % of card width: the line inside the box. The box is wide, so names
+    // up to 40 characters stay on one line (two lines would be no bigger), shrinking from 22 characters on.
+    nameSlot: { top: 30.2, maxSize: 6, wrapAt: 40, fit: 22 },
     ink: '#00193d',
   },
 

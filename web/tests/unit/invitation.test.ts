@@ -23,4 +23,11 @@ describe('guest name on the invitation card', () => {
     expect(n.family).toBe('Cookie');
     expect(n.size).toBeCloseTo(7.6 * 1.15);
   });
+  it('keeps longer names on one line on a wider slot, like the church card', () => {
+    const church = { top: 30.2, maxSize: 6, wrapAt: 40, fit: 22 };
+    const n = nameLayout('Mr. and Mrs. Felix Odumah', church, 'Pinyon Script');
+    expect(n.lines).toEqual(['Mr. and Mrs. Felix Odumah']);
+    expect(n.size).toBeCloseTo((6 * 22) / 25);
+    expect(nameLayout('The Royal Ambassadors, RCCG Region 52 Youth Choir', church, 'Pinyon Script').lines).toHaveLength(2);
+  });
 });
