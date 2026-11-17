@@ -101,9 +101,15 @@ async function lookupCode(req, raw) {
 // ---------- helpers ----------
 const inviteLink = (g) => `${INVITE_URL()}/i/${g.code}`;
 const qrSvg = (text) => QRCode.toString(text, { type: 'svg', margin: 0, errorCorrectionLevel: 'M', color: { dark: '#0f1a2e', light: '#f5eee2' } });
-const message = (g) =>
-  cfg.inviteMessage.replaceAll('{name}', g.name).replaceAll('{link}', inviteLink(g)).replaceAll('{weekday}', weekday()).replaceAll('{rsvpBy}', longDate(cfg.rsvpBy));
-const publicGuest = (g) => ({ ...g, link: inviteLink(g), message: message(g) });
+const churchOnly = (g) => !g.events.includes('trad');
+// The invitation follows the events ticked: church only gets the church message (the church wedding is open
+// to all, so no private link), traditional only the private invitation, and both a message naming both.
+const message = async (g) =>
+  churchOnly(g)
+    ? churchMessage(g.name)
+    : (g.events.includes('church') ? cfg.bothMessage : cfg.inviteMessage)
+        .replaceAll('{name}', g.name).replaceAll('{link}', inviteLink(g)).replaceAll('{weekday}', weekday()).replaceAll('{rsvpBy}', longDate(cfg.rsvpBy));
+const publicGuest = async (g) => ({ ...g, link: inviteLink(g), message: await message(g) });
 // What a guest sees about themselves on their invitation.
 const inviteGuest = (g) => ({ name: g.name, code: g.code, events: g.events, rsvp: g.rsvp, rsvpNote: g.rsvpNote, driverCard: !!g.driverCard, honour: g.honour || '', greeting: g.greeting || '' });
 whatsapp.setValues(async (g) => ({ name: g.name, first: g.name.split(/\s+/)[0], code: g.code, link: inviteLink(g), rsvpBy: longDate((await content.current()).rsvpBy) }));
@@ -137,13 +143,15 @@ const guestCard = async (g) => {
   });
 };
 whatsapp.setCardMaker(guestCard);
-// Email invitations: the traditional card goes with them for guests invited to the traditional wedding.
-const emailInvite = (g) => email.sendInvite(g, { text: message(g), link: inviteLink(g), card: g.events.includes('trad') ? guestCard(g) : null });
+// Email invitations: the traditional card goes with them for guests invited to the traditional wedding;
+// church-only guests are pointed to the website instead of a private invitation.
+const emailInvite = async (g) =>
+  email.sendInvite(g, { text: await message(g), link: churchOnly(g) ? BASE_URL() : inviteLink(g), card: churchOnly(g) ? null : guestCard(g) });
 const autoEmail = async () => email.configured() && !!(await content.current()).waAutoSend;
-// The card is the traditional invitation, so with a card template only guests invited to it are sent one
-// (the desk does the same).
+// The approved template is the traditional invitation (and its card), so only guests invited to the traditional
+// wedding are sent it; church-only guests get the church invitation from the desk instead (the desk does the same).
 async function forTemplate(guests) {
-  return (await whatsapp.needsImage()) ? guests.filter((g) => g.events.includes('trad')) : guests;
+  return guests.filter((g) => g.events.includes('trad'));
 }
 // Auto-send the WhatsApp invitation when a guest is added or imported, if turned on in Edit website.
 const autoSend = async () => whatsapp.configured() && !!(await content.current()).waAutoSend && !(await whatsapp.needsCard().catch(() => true));
@@ -296,7 +304,7 @@ api.get('/guests', wrap(async (req, res) => {
   const [guests, activity] = await Promise.all([store.all(), store.activity(80)]);
   // The desk is the private invitations: public church RSVPs and wishes have their own pages.
   const own = activity.filter((x) => !['church', 'wish'].includes(x.type)).slice(0, 60);
-  res.json({ guests: guests.map(publicGuest), activity: own, baseUrl: BASE_URL(), inviteUrl: INVITE_URL() });
+  res.json({ guests: await Promise.all(guests.map(publicGuest)), activity: own, baseUrl: BASE_URL(), inviteUrl: INVITE_URL() });
 }));
 api.post('/guests', wrap(async (req, res) => {
   let g;
@@ -305,26 +313,26 @@ api.post('/guests', wrap(async (req, res) => {
   if (whatsapp.eligible(g) && (await autoSend()) && (await forTemplate([g])).length) whatsappResult = await whatsapp.sendInvite(g);
   // An email address, when given, gets the invitation by email too.
   const emailResult = email.eligible(g) && (await autoEmail()) ? await emailInvite(g) : null;
-  res.json({ ...publicGuest((await store.byId(g.id)) || g), whatsapp: whatsappResult, email: emailResult });
+  res.json({ ...(await publicGuest((await store.byId(g.id)) || g)), whatsapp: whatsappResult, email: emailResult });
 }));
 api.patch('/guests/:id', wrap(async (req, res) => {
   const g = await store.update(req.params.id, req.body);
-  g ? res.json(publicGuest(g)) : res.status(404).json({ error: 'Guest not found' });
+  g ? res.json(await publicGuest(g)) : res.status(404).json({ error: 'Guest not found' });
 }));
 api.delete('/guests/:id', wrap(async (req, res) => res.json({ ok: await store.remove(req.params.id) })));
 api.post('/guests/:id/sent', wrap(async (req, res) => {
   const g = await guestOr404(req, res); if (!g) return;
-  res.json(publicGuest(req.body.sent === false ? await store.unmarkSent(g) : await store.markSent(g, req.body.via)));
+  res.json(await publicGuest(req.body.sent === false ? await store.unmarkSent(g) : await store.markSent(g, req.body.via)));
 }));
 api.post('/guests/:id/rsvp', wrap(async (req, res) => {
   const g = await guestOr404(req, res); if (!g) return;
   const r = ['yes', 'no', 'pending'].includes(req.body.rsvp) ? req.body.rsvp : 'pending';
-  res.json(publicGuest(await store.setRsvp(g, r, req.body.note ?? g.rsvpNote)));
+  res.json(await publicGuest(await store.setRsvp(g, r, req.body.note ?? g.rsvpNote)));
 }));
 api.post('/guests/:id/checkin', wrap(async (req, res) => {
   const g = await guestOr404(req, res); if (!g) return;
   req.body.undo ? await store.undoCheckIn(g) : await store.checkIn(g);
-  res.json(publicGuest(await store.byId(g.id)));
+  res.json(await publicGuest(await store.byId(g.id)));
 }));
 api.post('/import', wrap(async (req, res) => {
   const rows = parseCsv(String(req.body.csv || ''));
@@ -407,7 +415,7 @@ api.get('/whatsapp', wrap(async (req, res) => {
 api.post('/guests/:id/whatsapp', express.raw({ type: 'image/jpeg', limit: '4mb' }), wrap(async (req, res) => {
   const g = await guestOr404(req, res); if (!g) return;
   const r = await whatsapp.sendInvite(g, Buffer.isBuffer(req.body) ? req.body : null);
-  res.status(r.ok ? 200 : 400).json({ ...r, guest: publicGuest(await store.byId(g.id)) });
+  res.status(r.ok ? 200 : 400).json({ ...r, guest: await publicGuest(await store.byId(g.id)) });
 }));
 // Send to every WhatsApp guest who hasn't had an API invite yet (150 per call; the page repeats until done).
 // With a card template, the server draws each guest's card.
@@ -427,7 +435,7 @@ api.get('/leads', wrap(async (req, res) => res.json({ leads: await store.leads()
 api.post('/guests/:id/email', wrap(async (req, res) => {
   const g = await guestOr404(req, res); if (!g) return;
   const r = await emailInvite(g);
-  res.status(r.ok ? 200 : 400).json({ ...r, guest: publicGuest(await store.byId(g.id)) });
+  res.status(r.ok ? 200 : 400).json({ ...r, guest: await publicGuest(await store.byId(g.id)) });
 }));
 // Inbox: guests' WhatsApp replies, and free-text answers while their 24-hour window is open.
 api.get('/inbox', wrap(async (req, res) => {
@@ -451,7 +459,7 @@ api.get('/inbox/:thread', wrap(async (req, res) => {
   if (!messages.length && !g) return res.status(404).json({ error: 'Conversation not found' });
   await store.markThreadRead(thread);
   res.json({
-    thread, guest: g ? publicGuest(g) : null,
+    thread, guest: g ? await publicGuest(g) : null,
     name: g?.name || messages.find((m) => m.dir === 'in')?.name || thread.slice(2),
     phone: g ? whatsapp.toWaNumber(g.phone) : thread.slice(2),
     messages, windowUntil: whatsapp.windowUntil(messages),

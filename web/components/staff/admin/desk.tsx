@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { api, ApiError } from '@/lib/api';
 import { cfg } from '@/lib/config';
 import { ago, longDate, weekday } from '@/lib/format';
-import { canShareImages, cardFileName, download, preloadCard, renderCard } from '@/lib/card-image';
+import { canShareImages, cardFileName, churchCardFileName, download, preloadCard, renderCard, type CardFile } from '@/lib/card-image';
 import type { Activity, EmailStatus, Guest, Side, SiteSettings, WhatsAppStatus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { StaffHeader, StaffPage } from '../staff-shell';
@@ -22,8 +22,11 @@ import { activityText, CHANNEL_LABEL, PILL, sendHref, whatsAppHref, type Stage, 
 
 type Data = { guests: Guest[]; activity: Activity[]; inviteUrl: string };
 
-// Guests invited to the traditional wedding get their personalised card image with the message.
+// Guests invited to the traditional wedding get their personalised card (with their access code) with the message;
+// guests invited to the church wedding get the church card with their name. Invited to both, they get both.
 const getsCard = (g: Guest) => g.events.includes('trad');
+const getsChurchCard = (g: Guest) => g.events.includes('church');
+const church = cfg.churchCard;
 
 async function copy(text: string, done: string) {
   try {
@@ -64,6 +67,7 @@ export function Desk() {
         setCardSrc(full);
         setNameFont(s.nameFont);
         preloadCard(full, s.nameFont);
+        preloadCard(church.art, s.nameFont);
       },
       () => {},
     );
@@ -73,6 +77,21 @@ export function Desk() {
       renderCard({ src: cardSrc, name: g.name, code: g.code, nameSlot: cfg.invitationArt.nameSlot, codeSlot: cfg.invitationArt.codeSlot, font: nameFont }),
     [cardSrc, nameFont],
   );
+  /** Every card this guest is sent: the traditional card, the church card, or both. */
+  const cardsFor = useCallback(
+    async (g: Guest): Promise<CardFile[]> => {
+      const out: CardFile[] = [];
+      if (cardSrc && getsCard(g)) out.push({ blob: await cardFor(g), filename: cardFileName(g.name) });
+      if (getsChurchCard(g))
+        out.push({
+          blob: await renderCard({ src: church.art, name: g.name, nameSlot: church.nameSlot, ink: church.ink, font: nameFont }),
+          filename: churchCardFileName(g.name),
+        });
+      return out;
+    },
+    [cardSrc, cardFor, nameFont],
+  );
+  const hasCards = (g: Guest) => (!!cardSrc && getsCard(g)) || getsChurchCard(g);
   const [cardStep, setCardStep] = useState<Guest | null>(null);
 
   // WhatsApp Business: when connected, invitations go out from the couple's number without opening WhatsApp.
@@ -97,15 +116,22 @@ export function Desk() {
       () => {},
     );
   }, []);
-  /** Can this guest's invitation go through WhatsApp Business (with their card, if the template needs one)? */
+  /**
+   * Can this guest's invitation go through WhatsApp Business? Its approved template is the traditional invitation,
+   * so only for guests invited to the traditional wedding (with their card, if the template needs one).
+   */
   const viaApi = (g: Guest) =>
-    !!wa?.ready && g.channel === 'whatsapp' && !!g.phone && g.rsvp !== 'no' && (!wa.template?.needsImage || (!!cardSrc && getsCard(g)));
+    !!wa?.ready && g.channel === 'whatsapp' && !!g.phone && g.rsvp !== 'no' && getsCard(g) && (!wa.template?.needsImage || !!cardSrc);
 
-  async function saveCard(g: Guest) {
+  /** Download every card for this guest; says how many. */
+  async function saveCards(g: Guest) {
     try {
-      download(await cardFor(g), cardFileName(g.name));
+      const cards = await cardsFor(g);
+      cards.forEach((c) => download(c.blob, c.filename));
+      return cards.length;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Couldn’t create the card');
+      return 0;
     }
   }
 
@@ -122,12 +148,10 @@ export function Desk() {
   /** WhatsApp on this device: the guest's chat opens with the message, then the card follows from the share sheet. */
   async function sendFromMyWhatsApp(g: Guest) {
     window.open(whatsAppHref(g), '_blank', 'noopener'); // open now, while the click still counts as the user's
-    if (cardSrc && getsCard(g)) {
+    if (hasCards(g)) {
       if (canShareImages()) setCardStep(g);
-      else {
-        await saveCard(g);
-        toast.success('Card downloaded. Attach it in the WhatsApp chat that just opened.');
-      }
+      else if ((await saveCards(g)) > 1) toast.success('Both cards downloaded. Attach them in the WhatsApp chat that just opened.');
+      else toast.success('Card downloaded. Attach it in the WhatsApp chat that just opened.');
     }
     markSent(g, 'whatsapp');
   }
@@ -345,7 +369,7 @@ export function Desk() {
                     onMessage={() => sendFromMyWhatsApp(g)}
                     onEmail={mailReady && g.email ? () => sendEmail(g) : undefined}
                     viaApi={viaApi(g)}
-                    onCard={cardSrc && getsCard(g) ? () => saveCard(g) : undefined}
+                    onCard={hasCards(g) ? () => saveCards(g) : undefined}
                   />
                 ))
               )}
@@ -378,7 +402,7 @@ export function Desk() {
 
       <GuestDialog open={editing !== undefined} guest={editing ?? null} groups={groups} onClose={() => setEditing(undefined)} onSaved={refresh} />
       {wa && <WhatsAppSendDialog guests={waSending} wa={wa} render={cardFor} onProgress={refresh} onClose={() => setWaSending(null)} />}
-      <SendCardDialog guest={cardStep} render={cardFor} onClose={() => setCardStep(null)} />
+      <SendCardDialog guest={cardStep} render={cardsFor} onClose={() => setCardStep(null)} />
       <ImportDialog open={importing} onClose={() => setImporting(false)} onImported={refresh} />
     </StaffPage>
   );
@@ -502,9 +526,9 @@ function GuestRow({
             variant="outline"
             className="border-gold/40 bg-transparent text-gold"
             onClick={onCard}
-            title="Download their personalised invitation card"
+            title={g.events.length > 1 ? 'Download their two invitation cards (traditional and church)' : 'Download their personalised invitation card'}
           >
-            <ImageDown /> Card
+            <ImageDown /> {g.events.length > 1 ? 'Cards' : 'Card'}
           </Button>
         )}
       </div>

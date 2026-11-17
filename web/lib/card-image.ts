@@ -84,6 +84,9 @@ function drawCode(x: CanvasRenderingContext2D, code: string, codeSlot: CodeSlot,
 }
 
 export const cardFileName = (name: string) => `Invitation - ${name.replace(/[\\/:*?"<>|]+/g, '').trim()}.jpg`;
+export const churchCardFileName = (name: string) => `Church invitation - ${name.replace(/[\\/:*?"<>|]+/g, '').trim()}.jpg`;
+/** A drawn card and the name to save or share it under. */
+export type CardFile = { blob: Blob; filename: string };
 
 export function download(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
