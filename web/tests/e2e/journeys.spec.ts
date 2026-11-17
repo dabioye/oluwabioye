@@ -411,7 +411,7 @@ test('with WhatsApp Business, the desk sends each guest their card and message f
 
   // Everyone else who hasn't had theirs yet
   await page.getByRole('button', { name: 'Send all pending via WhatsApp' }).click();
-  const bulk = page.getByRole('dialog', { name: /^Send \d+ invitations on WhatsApp$/ });
+  const bulk = page.getByRole('dialog', { name: /^Send \d+ invitations to \d+ guests on WhatsApp$/ });
   await bulk.getByRole('button', { name: /^Send all \d+$/ }).click();
   await expect(bulk.getByText(/^Done\./)).toBeVisible({ timeout: 30_000 });
   await expect(bulk.getByText(/failed/)).toHaveCount(0);
@@ -424,6 +424,56 @@ test('with WhatsApp Business, the desk sends each guest their card and message f
     m.template.components.some((c) => c.type === 'button' && c.parameters[0].text === kemi.code),
   );
   expect(forKemi).toHaveLength(1);
+});
+
+test('several guests at once: tick them, change their events, then send or resend their invitations', async ({ page, request }) => {
+  const ada = await addGuest(page.request, { name: 'Bulk Ada', phone: '08061110001' });
+  const bisi = await addGuest(page.request, { name: 'Bulk Bisi', phone: '08061110002' }, false);
+  await addGuest(page.request, { name: 'Bulk Printed', phone: '08061110003', channel: 'physical' }, false);
+  await page.goto(`${PUBLIC}/admin`);
+  await expect(page.getByText(/WhatsApp Business · ready/i)).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('searchbox', { name: 'Search guests' }).fill('Bulk');
+  const bar = page.getByRole('toolbar', { name: 'Selected guests' });
+  await expect(bar).toHaveCount(0);
+
+  // Two of them: church only. The church template isn't approved here, so nothing is offered to send.
+  await page.getByRole('checkbox', { name: 'Select Bulk Ada' }).check();
+  await page.getByRole('checkbox', { name: 'Select Bulk Bisi' }).check();
+  await expect(bar.getByText('2 selected')).toBeVisible();
+  await bar.getByRole('button', { name: 'Church only' }).click();
+  await expect(page.getByText('2 guests set to church only')).toBeVisible();
+  for (const n of ['Bulk Ada', 'Bulk Bisi']) {
+    const g = (await (await page.request.get(`${PUBLIC}/api/admin/guests`)).json()).guests.find((x: { name: string }) => x.name === n);
+    expect(g.events).toEqual(['church']);
+  }
+
+  // Then traditional only: their traditional invitation hasn't gone yet, so the desk offers to send it now.
+  await bar.getByRole('button', { name: 'Traditional only' }).click();
+  await expect(page.getByText('2 invitations haven’t been sent to them yet.')).toBeVisible();
+  await page.getByRole('button', { name: 'Send now' }).click();
+  const send = page.getByRole('dialog', { name: 'Send 2 invitations to 2 guests on WhatsApp' });
+  await send.getByRole('button', { name: 'Send all 2' }).click();
+  await expect(send.getByText(/Done\. 2 sent of 2/)).toBeVisible({ timeout: 30_000 });
+  await send.getByRole('button', { name: 'Done', exact: true }).click();
+
+  // Resend to everyone shown: the printed-card guest is skipped and said so.
+  await page.getByRole('checkbox', { name: 'Select all 3 shown' }).check();
+  await expect(bar.getByText('3 selected')).toBeVisible();
+  await bar.getByRole('button', { name: 'Resend invitations' }).click();
+  await expect(page.getByText(/1 skipped .*: Bulk Printed\./)).toBeVisible();
+  const resend = page.getByRole('dialog', { name: 'Send 2 invitations to 2 guests on WhatsApp' });
+  await resend.getByRole('button', { name: 'Send all 2' }).click();
+  await expect(resend.getByText(/Done\. 2 sent of 2/)).toBeVisible({ timeout: 30_000 });
+  await resend.getByRole('button', { name: 'Done', exact: true }).click();
+  const meta = await (await request.get(`${META}/__sent`)).json();
+  const toCode = (code: string) =>
+    meta.sent.filter((m: { template: { components: { type: string; parameters: { text?: string }[] }[] } }) =>
+      m.template.components.some((c) => c.type === 'button' && c.parameters[0].text === code),
+    );
+  expect(toCode(ada.code)).toHaveLength(2);
+  expect(toCode(bisi.code)).toHaveLength(2);
+  await bar.getByRole('button', { name: 'Clear' }).click();
+  await expect(bar).toHaveCount(0);
 });
 
 test('guests’ WhatsApp replies arrive in the inbox, alert the couple, and can be answered', async ({ page, request }) => {

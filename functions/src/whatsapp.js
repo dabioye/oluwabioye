@@ -1,7 +1,9 @@
-// Sends the private traditional-wedding invitation through the WhatsApp Business Cloud API (Meta),
-// from the couple's own WhatsApp number, and tracks delivery via Meta's webhook.
+// Sends invitations through the WhatsApp Business Cloud API (Meta), from the couple's own WhatsApp number,
+// and tracks delivery via Meta's webhook. There are two templates: the private traditional-wedding invitation
+// (with the guest's access card) and the church-wedding invitation (with the church card). A guest is sent the
+// one for each event they are invited to, and each send is tracked on its own.
 //
-// The approved template is read from Meta (language, header, variables, button), so the wording can change
+// Each approved template is read from Meta (language, header, variables, button), so the wording can change
 // in WhatsApp Manager without a code change: each variable is filled from its name or its example value.
 // If the approved template can't be read, API sending is blocked and the desk falls back to a manual WhatsApp link.
 // When the template starts with an image, the guest's personalised card (drawn by the invitation desk) is uploaded.
@@ -20,11 +22,19 @@ function settings() {
     token: env('WHATSAPP_TOKEN'),
     phoneId: env('WHATSAPP_PHONE_ID') || cfg.whatsapp.phoneNumberId,
     template: env('WHATSAPP_TEMPLATE') || cfg.whatsapp.template,
+    churchTemplate: env('WHATSAPP_CHURCH_TEMPLATE') || cfg.whatsapp.churchTemplate,
     lang: env('WHATSAPP_LANG') || 'en',
     headerImage: env('WHATSAPP_HEADER_IMAGE'), // a fixed image for an image header when no card is sent
   };
 }
 const configured = () => { const s = settings(); return !!(s.token && s.phoneId); };
+
+// The two invitations, and where each one's send is recorded on the guest.
+const KINDS = {
+  trad: { template: () => settings().template, id: 'waMessageId', status: 'waStatus', error: 'waError', at: 'waSentAt', label: 'WhatsApp API' },
+  church: { template: () => settings().churchTemplate, id: 'waChurchMessageId', status: 'waChurchStatus', error: 'waChurchError', at: 'waChurchSentAt', label: 'WhatsApp API · church' },
+};
+const kindOf = (k) => (k === 'church' ? 'church' : 'trad');
 
 // 0803 123 4567 -> 2348031234567 ; +44 7700 900123 -> 447700900123
 function toWaNumber(phone) {
@@ -82,8 +92,13 @@ async function template({ fresh = false, name = settings().template } = {}) {
   return t;
 }
 // The README's layout, for when the template can't be read (e.g. a token without template access).
-function fallbackTemplate() {
+function fallbackTemplate(kind = 'trad') {
   const s = settings();
+  if (kind === 'church')
+    return {
+      name: s.churchTemplate, language: s.lang, status: 'UNKNOWN', category: '', fallback: true,
+      components: [{ type: 'HEADER', format: 'IMAGE' }, { type: 'BODY', text: 'Dear {{1}}, … We look forward to celebrating with you.', example: { body_text: [['Tope Omidiji']] } }],
+    };
   return {
     name: s.template, language: s.lang, status: 'UNKNOWN', category: '', fallback: true,
     components: [
@@ -93,7 +108,8 @@ function fallbackTemplate() {
     ],
   };
 }
-const templateOrFallback = () => template().catch(() => fallbackTemplate());
+const templateFor = (kind, opts = {}) => template({ ...opts, name: KINDS[kind].template() });
+const templateOrFallback = (kind) => templateFor(kind).catch(() => fallbackTemplate(kind));
 
 // ---------- filling it in ----------
 const VARS = /{{\s*([\w.]+)\s*}}/g;
@@ -172,45 +188,51 @@ function describe(t) {
 }
 
 // ---------- sending ----------
-let valuesFor = (g) => ({ name: g.name, first: g.name.split(/\s+/)[0], code: g.code, link: g.code, rsvpBy: '' }); // set by the server
+// (guest, kind) -> the values a template is filled with; set by the server.
+let valuesFor = (g) => ({ name: g.name, first: g.name.split(/\s+/)[0], code: g.code, link: g.code, rsvpBy: '' });
 const setValues = (fn) => (valuesFor = fn);
 
-// Draws a guest's personalised card on the server, for sends that don't come from the desk (set by the server).
+// (guest, kind) -> the guest's card drawn on the server, for sends that don't come from the desk (set by the server).
 let makeCard = null;
 const setCardMaker = (fn) => (makeCard = fn);
 
 /** Does the approved template start with an image (the guest's card)? */
-async function needsImage() {
-  const t = await template();
+async function needsImage(kind = 'trad') {
+  const t = await templateFor(kind);
   if (t.status !== 'APPROVED') throw new WhatsAppError(`The WhatsApp template is ${String(t.status).toLowerCase()}, not approved`);
   return describe(t).needsImage;
 }
 
 /** Does this template need a card that only the desk can supply (so auto-send and send-pending can't go)? */
-async function needsCard() {
-  return (await needsImage()) && !makeCard && !settings().headerImage;
+async function needsCard(kind = 'trad') {
+  return (await needsImage(kind)) && !makeCard && !settings().headerImage;
 }
 
+/** Is this invitation's template approved, so it can be sent? (Read from Meta at most every 10 minutes.) */
+const ready = (kind) => templateFor(kind).then((t) => t.status === 'APPROVED', () => false);
+
 /**
- * Send one guest's invitation. `card` is their personalised card as JPEG (from the desk) for templates that
- * start with an image; without it, the server draws the card itself.
+ * Send one guest one invitation (`kind` trad or church). `card` is their personalised card as JPEG (from the
+ * desk) for templates that start with an image; without it, the server draws the card itself.
  */
-async function sendInvite(guest, card) {
+async function sendInvite(guest, card, kind = 'trad') {
+  kind = kindOf(kind);
+  const K = KINDS[kind];
   if (!configured()) return { ok: false, error: 'WhatsApp API is not set up yet (WHATSAPP_TOKEN / WHATSAPP_PHONE_ID).' };
   const to = toWaNumber(guest.phone);
   if (!to) {
-    await store.setWa(guest.id, { waStatus: 'failed', waError: 'No valid WhatsApp number' }, 'wafailed', 'No valid WhatsApp number');
+    await store.setWa(guest.id, { [K.status]: 'failed', [K.error]: 'No valid WhatsApp number' }, 'wafailed', 'No valid WhatsApp number');
     return { ok: false, error: `${guest.name}: no valid WhatsApp number` };
   }
   const s = settings();
   try {
-    const t = await template();
+    const t = await templateFor(kind);
     if (t.status !== 'APPROVED') throw new WhatsAppError(`The WhatsApp template is ${String(t.status).toLowerCase()}, not approved`);
     let header = null;
     if (describe(t).needsImage) {
       if (!card?.length && makeCard) {
         try {
-          card = await makeCard(guest);
+          card = await makeCard(guest, kind);
         } catch (e) {
           throw new WhatsAppError(`Couldn’t draw ${guest.name}’s card: ${e.message}`);
         }
@@ -224,7 +246,7 @@ async function sendInvite(guest, card) {
       } else if (s.headerImage) header = { link: s.headerImage };
       else throw new WhatsAppError('This template starts with an image, so the guest’s card is needed');
     }
-    const { components } = fill(t, await valuesFor(guest), header);
+    const { components } = fill(t, await valuesFor(guest, kind), header);
     const body = await graph(`/${s.phoneId}/messages`, {
       method: 'POST',
       body: { messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'template', template: { name: t.name, language: { code: t.language }, components } },
@@ -232,35 +254,46 @@ async function sendInvite(guest, card) {
     const id = body.messages?.[0]?.id;
     if (!id) throw new WhatsAppError('WhatsApp didn’t return a message id');
     const at = new Date().toISOString();
-    await store.setWa(guest.id, { waMessageId: id, waStatus: 'accepted', waError: '', waSentAt: at, sentAt: guest.sentAt || at }, 'sent', 'WhatsApp API');
-    return { ok: true, id };
+    await store.setWa(guest.id, { [K.id]: id, [K.status]: 'accepted', [K.error]: '', [K.at]: at, sentAt: guest.sentAt || at }, 'sent', K.label);
+    return { ok: true, id, kind };
   } catch (e) {
     if (!(e instanceof WhatsAppError)) throw e;
-    await store.setWa(guest.id, { waStatus: 'failed', waError: e.message.slice(0, 300) }, 'wafailed', e.message.slice(0, 120));
-    return { ok: false, error: `${guest.name}: ${e.message}` };
+    await store.setWa(guest.id, { [K.status]: 'failed', [K.error]: e.message.slice(0, 300) }, 'wafailed', e.message.slice(0, 120));
+    return { ok: false, error: `${guest.name}${kind === 'church' ? ' (church)' : ''}: ${e.message}` };
   }
 }
 
-// Send to many guests with limited concurrency (Cloud API allows far more; this keeps the function responsive).
-async function sendMany(guests, concurrency = 8) {
+// Send many invitations ({ guest, kind }) with limited concurrency (Cloud API allows far more; this keeps the
+// function responsive). One guest's two invitations go one after the other, so they arrive in order.
+async function sendMany(items, concurrency = 8) {
+  const byGuest = new Map();
+  for (const it of items) byGuest.set(it.guest.id, [...(byGuest.get(it.guest.id) || []), it]);
+  const queue = [...byGuest.values()];
   const results = [];
   let i = 0;
-  await Promise.all(Array.from({ length: Math.min(concurrency, guests.length) }, async () => {
-    while (i < guests.length) results.push(await sendInvite(guests[i++]));
+  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+    while (i < queue.length) for (const it of queue[i++]) results.push(await sendInvite(it.guest, null, it.kind));
   }));
   return { sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).map((r) => r.error) };
 }
 
-const eligible = (g) => g.channel === 'whatsapp' && !!g.phone && !g.waMessageId && g.rsvp !== 'no';
+/** Can this guest be sent invitations on WhatsApp at all? */
+const reachable = (g) => g.channel === 'whatsapp' && !!g.phone && g.rsvp !== 'no';
+/** The invitations this guest should get: one per event they are invited to. */
+const wants = (g) => ['trad', 'church'].filter((k) => (g.events || []).includes(k));
+/** The ones not yet sent through WhatsApp Business. */
+const pending = (g) => (reachable(g) ? wants(g).filter((k) => !g[KINDS[k].id]) : []);
+const eligible = (g) => pending(g).length > 0;
 
 // ---------- what the desk shows ----------
 async function status() {
   if (!configured()) return { configured: false, ready: false };
   const out = { configured: true, ready: false, problems: [] };
-  const [info, phone, t] = await Promise.all([
+  const [info, phone, t, c] = await Promise.all([
     tokenInfo().catch((e) => ({ error: e.message })),
     graph(`/${settings().phoneId}?fields=display_phone_number,verified_name,quality_rating`).catch((e) => ({ error: e.message })),
-    template({ fresh: true }).catch((e) => ({ error: e.message })),
+    templateFor('trad', { fresh: true }).catch((e) => ({ error: e.message })),
+    templateFor('church', { fresh: true }).catch((e) => ({ error: e.message })),
   ]);
   out.token = info;
   out.phone = phone;
@@ -274,11 +307,15 @@ async function status() {
   out.template = describe(t.error ? fallbackTemplate() : t);
   // Not ready until the approved template is read: a guessed layout is accepted by Meta, then silently dropped.
   out.ready = !phone.error && !t.error && t.status === 'APPROVED';
+  // The church invitation is separate: until its template is approved, church invitations go from the desk by hand.
+  out.churchTemplate = c.error ? { ...describe(fallbackTemplate('church')), error: c.error } : describe(c);
+  out.churchReady = !phone.error && !c.error && c.status === 'APPROVED';
   return out;
 }
 
-async function preview(guest) {
-  return fill(await templateOrFallback(), await valuesFor(guest), { id: 'preview' }).text;
+async function preview(guest, kind = 'trad') {
+  kind = kindOf(kind);
+  return fill(await templateOrFallback(kind), await valuesFor(guest, kind), { id: 'preview' }).text;
 }
 
 // ---- Webhook: Meta calls this with delivery/read/failed statuses ----
@@ -303,12 +340,13 @@ async function handleWebhook(body) {
     if (m) continue;
     const g = await store.byWaId(st.id);
     if (!g) continue;
+    const K = KINDS[g.waChurchMessageId === st.id ? 'church' : 'trad'];
     // Statuses can arrive out of order; never move backwards (except to failed).
-    if (st.status !== 'failed' && (RANK[st.status] ?? -1) <= (RANK[g.waStatus] ?? -1)) continue;
-    const p = { waStatus: st.status };
-    if (st.status === 'failed') p.waError = ((st.errors || [])[0] || {}).title || 'Delivery failed';
+    if (st.status !== 'failed' && (RANK[st.status] ?? -1) <= (RANK[g[K.status]] ?? -1)) continue;
+    const p = { [K.status]: st.status };
+    if (st.status === 'failed') p[K.error] = ((st.errors || [])[0] || {}).title || 'Delivery failed';
     if (st.status === 'read') p.waReadAt = new Date(Number(st.timestamp) * 1000 || Date.now()).toISOString();
-    await store.setWa(g.id, p, st.status === 'read' ? 'waread' : st.status === 'failed' ? 'wafailed' : null, st.status === 'failed' ? p.waError : st.status);
+    await store.setWa(g.id, p, st.status === 'read' ? 'waread' : st.status === 'failed' ? 'wafailed' : null, st.status === 'failed' ? p[K.error] : st.status);
   }
   let replies = 0;
   for (const v of values) {
@@ -415,7 +453,7 @@ async function alert(name, text, thread) {
 }
 
 module.exports = {
-  configured, status, preview, needsCard, needsImage, setCardMaker, sendInvite, sendMany, eligible, toWaNumber, setValues,
+  configured, status, preview, needsCard, needsImage, ready, setCardMaker, sendInvite, sendMany, eligible, reachable, wants, pending, toWaNumber, setValues,
   verifyChallenge, signatureOk, handleWebhook, reply, windowUntil, rsvpToInbox, setInboxLink, WhatsAppError,
   _setFetch: (f) => (fetchImpl = f), _reset: () => (cached = {}),
 };

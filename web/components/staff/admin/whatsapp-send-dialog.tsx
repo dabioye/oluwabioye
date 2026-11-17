@@ -4,30 +4,34 @@ import { Loader2, Send, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { api, ApiError } from '@/lib/api';
-import type { Guest, WhatsAppStatus } from '@/lib/types';
+import type { Guest, InviteKind, WaSend, WhatsAppStatus } from '@/lib/types';
 
 type Phase = 'confirm' | 'sending' | 'done';
 const PAUSE_MS = 600; // a steady pace keeps the number in good standing with WhatsApp
 
 /**
- * Sends invitations through WhatsApp Business from the couple's number: a preview of the first guest's
- * card and message, then one send per guest (with their card when the template starts with an image).
+ * Sends invitations through WhatsApp Business from the couple's number: a preview of the first one's card
+ * and message, then one send per invitation (with the card when the template starts with an image). A guest
+ * invited to both weddings gets two: the traditional invitation, then the church one.
  */
 export function WhatsAppSendDialog({
-  guests,
+  sends,
   wa,
   render,
   onProgress,
   onClose,
 }: {
-  guests: Guest[] | null;
+  sends: WaSend[] | null;
   wa: WhatsAppStatus;
-  render: (g: Guest) => Promise<Blob>;
+  render: (g: Guest, kind: InviteKind) => Promise<Blob>;
   onProgress: () => void;
   onClose: () => void;
 }) {
-  const first = guests?.[0] ?? null;
-  const needsCard = !!wa.template?.needsImage;
+  const tpl = (k: InviteKind) => (k === 'church' ? wa.churchTemplate : wa.template);
+  const head = sends?.[0] ?? null;
+  const first = head?.guest ?? null;
+  const kind = head?.kind ?? 'trad';
+  const needsCard = !!tpl(kind)?.needsImage;
   const [preview, setPreview] = useState<{ id: string; text: string; card: string } | null>(null);
   const [phase, setPhase] = useState<Phase>('confirm');
   const [sent, setSent] = useState(0);
@@ -40,12 +44,12 @@ export function WhatsAppSendDialog({
     let live = true;
     let url = '';
     Promise.all([
-      api<WhatsAppStatus>(`/api/admin/whatsapp?guest=${encodeURIComponent(first.id)}`).then(
+      api<WhatsAppStatus>(`/api/admin/whatsapp?guest=${encodeURIComponent(first.id)}&kind=${kind}`).then(
         (s) => s.preview || '',
         () => '',
       ),
       needsCard
-        ? render(first).then(
+        ? render(first, kind).then(
             (b) => (url = URL.createObjectURL(b)),
             () => '',
           )
@@ -55,25 +59,26 @@ export function WhatsAppSendDialog({
       live = false;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [first, needsCard, render]);
+  }, [first, kind, needsCard, render]);
 
   async function sendAll() {
-    if (!guests) return;
+    if (!sends) return;
     stop.current = false;
     setPhase('sending');
     setSent(0);
     setFailed([]);
-    for (const [i, g] of guests.entries()) {
+    for (const [i, { guest: g, kind: k }] of sends.entries()) {
       if (stop.current) break;
       try {
-        const card = needsCard ? await render(g) : undefined;
-        await api(`/api/admin/guests/${g.id}/whatsapp`, { method: 'POST', raw: card, type: 'image/jpeg' });
+        const card = tpl(k)?.needsImage ? await render(g, k) : undefined;
+        await api(`/api/admin/guests/${g.id}/whatsapp?kind=${k}`, { method: 'POST', raw: card, type: 'image/jpeg' });
         setSent((n) => n + 1);
       } catch (e) {
-        setFailed((f) => [...f, e instanceof ApiError ? e.message : `${g.name}: ${e instanceof Error ? e.message : 'couldn’t send'}`]);
+        const who = `${g.name}${k === 'church' ? ' (church)' : ''}`;
+        setFailed((f) => [...f, e instanceof ApiError ? e.message : `${who}: ${e instanceof Error ? e.message : 'couldn’t send'}`]);
       }
       if ((i + 1) % 10 === 0) onProgress();
-      if (i < guests.length - 1) await new Promise((r) => setTimeout(r, PAUSE_MS));
+      if (i < sends.length - 1) await new Promise((r) => setTimeout(r, PAUSE_MS));
     }
     onProgress();
     setPhase('done');
@@ -86,17 +91,29 @@ export function WhatsAppSendDialog({
     onClose();
   }
 
-  const n = guests?.length ?? 0;
+  const n = sends?.length ?? 0;
+  const people = new Set(sends?.map((s) => s.guest.id)).size;
   const many = n > 1;
+  const kinds = new Set(sends?.map((s) => s.kind));
   const from = wa.phone?.display_phone_number || 'your WhatsApp Business number';
+  const title =
+    people > 1
+      ? `Send ${n} invitations to ${people} guests on WhatsApp`
+      : many
+        ? `Send ${first?.name}’s two invitations on WhatsApp`
+        : `Send ${first?.name}’s ${kind === 'church' ? 'church ' : ''}invitation on WhatsApp`;
   return (
-    <Dialog open={!!guests} onOpenChange={(o) => !o && phase !== 'sending' && close()}>
+    <Dialog open={!!sends} onOpenChange={(o) => !o && phase !== 'sending' && close()}>
       <DialogContent className="max-h-[92vh] max-w-md overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{many ? `Send ${n} invitations on WhatsApp` : `Send ${first?.name}’s invitation on WhatsApp`}</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            From {from}, with the “{wa.template?.name}” template.{' '}
-            {many ? `Here is ${first?.name}’s; each guest gets their own.` : 'This is what they’ll receive.'}
+            From {from}, with the {[...kinds].map((k) => `“${tpl(k)?.name}”`).join(' and ')} {kinds.size > 1 ? 'templates' : 'template'}.{' '}
+            {kinds.size > 1
+              ? `Guests invited to both weddings get both, traditional first. Here is ${first?.name}’s ${kind === 'church' ? 'church' : 'traditional'} one.`
+              : many
+                ? `Here is ${first?.name}’s; each guest gets their own.`
+                : 'This is what they’ll receive.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -106,14 +123,18 @@ export function WhatsAppSendDialog({
               {needsCard &&
                 (shown?.card ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={shown.card} alt={`Invitation card for ${first?.name}`} className="w-full rounded-md" />
+                  <img
+                    src={shown.card}
+                    alt={`${kind === 'church' ? 'Church invitation' : 'Invitation'} card for ${first?.name}`}
+                    className="w-full rounded-md"
+                  />
                 ) : (
                   <div className="grid aspect-[2/3] w-full place-items-center rounded-md bg-black/20">
                     <Loader2 role="img" className="animate-spin" aria-label="Preparing the card" />
                   </div>
                 ))}
-              <p className="m-0 px-1.5 pb-1 whitespace-pre-wrap">{shown ? shown.text || wa.template?.body : 'Preparing…'}</p>
-              {wa.template?.buttons.map((b) => (
+              <p className="m-0 px-1.5 pb-1 whitespace-pre-wrap">{shown ? shown.text || tpl(kind)?.body : 'Preparing…'}</p>
+              {tpl(kind)?.buttons.map((b) => (
                 <span key={b.text} className="border-t border-white/15 pt-1.5 text-center text-[#53bdeb]">
                   {b.text}
                 </span>
