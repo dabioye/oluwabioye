@@ -128,7 +128,18 @@ module.exports = {
 
   // WhatsApp Business (Cloud API): the sending number and the approved template. The token is the WHATSAPP_TOKEN secret.
   // churchTemplate is the church-wedding invitation, sent with the church card (README: Templates).
-  whatsapp: { phoneNumberId: '1170328419507856', businessAccountId: '27648081441479141', template: 'oluwabioye_invitation', churchTemplate: 'oluwabioye_church_invitation' },
+  // reminderTemplate is the countdown reminder sent before the day (README: Templates).
+  whatsapp: {
+    phoneNumberId: '1170328419507856', businessAccountId: '27648081441479141', template: 'oluwabioye_invitation',
+    churchTemplate: 'oluwabioye_church_invitation', reminderTemplate: 'oluwabioye_countdown',
+  },
+  // The countdown reminder's line about the guest's day, by the events they are invited to. One line each:
+  // WhatsApp template values can't hold line breaks.
+  reminderDetails: {
+    church: 'The Wedding Ceremony is at 10:00 AM at RCCG Garden of Peace, Region 52 Headquarters, 78/80 Falolu Road, Surulere.',
+    trad: 'The Making of Oluwabioye starts at 2:00 PM. Please come with your access card, which is in your invitation.',
+    both: 'The Wedding Ceremony is at 10:00 AM at RCCG Garden of Peace, Surulere, and The Making of Oluwabioye starts at 2:00 PM. Please come with your access card, which is in your invitation.',
+  },
   // Sent with the church card. {rsvp} becomes a line with the RSVP link while the church RSVP is open.
   churchMessage:
     'Dear {name},\n\nSarah & Damilare joyfully invite you to their wedding on {weekday}, 17 December 2026 at 10:00 AM, at RCCG Garden of Peace, Region 52 Headquarters, 78/80 Falolu Road, Surulere, Lagos.\n\nDetails and directions: {link}{rsvp}\n\nWe look forward to celebrating with you.',

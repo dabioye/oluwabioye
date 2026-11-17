@@ -113,10 +113,29 @@ const publicGuest = async (g) => ({ ...g, link: inviteLink(g), message: await me
 // What a guest sees about themselves on their invitation.
 const inviteGuest = (g) => ({ name: g.name, code: g.code, events: g.events, rsvp: g.rsvp, rsvpNote: g.rsvpNote, driverCard: !!g.driverCard, honour: g.honour || '', greeting: g.greeting || '' });
 // The church invitation points to the website (the church wedding is open to all), not the private link.
-whatsapp.setValues(async (g, kind) => ({
-  name: g.name, first: g.name.split(/\s+/)[0], code: g.code, link: kind === 'church' ? BASE_URL() : inviteLink(g),
-  rsvpBy: longDate((await content.current()).rsvpBy),
-}));
+// The countdown reminder counts the days to the ceremony like the website's countdown, says what the guest's day
+// holds, and links guests of the traditional wedding to their invitation (and access card) through the website.
+whatsapp.setValues(async (g, kind) => {
+  const v = {
+    name: g.name, first: g.name.split(/\s+/)[0], code: g.code, link: kind === 'church' ? BASE_URL() : inviteLink(g),
+    rsvpBy: longDate((await content.current()).rsvpBy),
+  };
+  if (kind !== 'reminder') return v;
+  const trad = g.events.includes('trad');
+  return {
+    ...v,
+    countdown: countdown(),
+    details: cfg.reminderDetails[trad ? (g.events.includes('church') ? 'both' : 'trad') : 'church'],
+    link: trad ? `${BASE_URL()}/i/${g.code}` : `${BASE_URL()}/?from=reminder`,
+  };
+});
+/** Time left to the ceremony as the website's countdown shows it, in words ('' once it has started). */
+function countdown(now = Date.now()) {
+  const ms = new Date(cfg.events.church.startsAt).getTime() - now;
+  if (ms <= 0) return '';
+  const days = Math.floor(ms / 86400e3);
+  return days > 1 ? `${days} days` : days === 1 ? '1 day' : 'less than a day';
+}
 whatsapp.setInboxLink((thread) => `${BASE_URL()}/admin/inbox?thread=${encodeURIComponent(thread)}`);
 // Guests' personalised cards for sends that don't come from the desk, drawn on the server the same way.
 // The card artwork is an upload (/media/…), a built-in file on a site (/img/…: the invite site's traditional
