@@ -131,6 +131,10 @@ module.exports = {
   // Sent with the church card. {rsvp} becomes a line with the RSVP link while the church RSVP is open.
   churchMessage:
     'Dear {name},\n\nSarah & Damilare joyfully invite you to their wedding on {weekday}, 17 December 2026 at 10:00 AM, at RCCG Garden of Peace, Region 52 Headquarters, 78/80 Falolu Road, Surulere, Lagos.\n\nDetails and directions: {link}{rsvp}\n\nWe look forward to celebrating with you.',
+  // For guests invited to both the church wedding and the traditional wedding ({name}, {link}, {rsvpBy} as above).
+  bothMessage:
+    'Dear {name},\n\nSarah & Damilare joyfully invite you to their wedding on {weekday}, 17 December 2026:\n\nWedding Ceremony, 10:00 AM, at RCCG Garden of Peace, Region 52 Headquarters, 78/80 Falolu Road, Surulere, Lagos.\n\nThe Making of Oluwabioye, our traditional wedding and reception, 2:00 PM in Lagos.\n\nThis invitation is personal to you. Please don\'t share the link.\nYour invitation, RSVP and access card: {link}\n\nKindly RSVP by {rsvpBy}.\n\n#TheMakingOfOluwabioye',
+  // For guests invited to the traditional wedding only. Guests invited to the church wedding only get churchMessage.
   inviteMessage:
     'Dear {name},\n\nSarah & Damilare joyfully invite you to The Making of Oluwabioye, our traditional wedding and reception, on {weekday}, 17 December 2026 at 2:00 PM in Lagos.\n\nThis invitation is personal to you. Please don\'t share the link.\nYour invitation, RSVP and access card: {link}\n\nKindly RSVP by {rsvpBy}.\n\n#TheMakingOfOluwabioye',
 };

@@ -224,7 +224,7 @@ test('the couple signs in, adds a guest and edits the website', async ({ page })
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('button', { name: /Kemi Adeyemi/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Send · WhatsApp/ }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Card' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cards' }).first()).toBeVisible();
 
   await page.goto(`${PUBLIC}/admin/site`);
   await page.getByLabel('Welcome note under your names').fill('We can’t wait to celebrate with you.');
@@ -281,17 +281,21 @@ test('sending on WhatsApp from a phone opens the guest’s chat with the message
   expect(opened[0]).toMatch(/^https:\/\/wa\.me\/2348066666666\?text=/);
   expect(decodeURIComponent(opened[0])).toContain(`/i/${g.code}`);
 
-  const dialog = page.getByRole('dialog', { name: /Now send Funke’s card/ });
-  await expect(dialog.getByRole('img', { name: 'Invitation card for Funke Bello' })).toBeVisible();
-  await dialog.getByRole('button', { name: 'Share card' }).click();
+  // Invited to both weddings, so both cards: the traditional one (with her code) and the church one.
+  const dialog = page.getByRole('dialog', { name: /Now send Funke’s cards/ });
+  await expect(dialog.getByRole('img', { name: 'Invitation card for Funke Bello', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('img', { name: 'Church invitation card for Funke Bello' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Share cards' }).click();
   await expect(dialog).toBeHidden();
   const shared = await page.evaluate(
     () => (window as unknown as { shared: { text?: string; files: { name: string; type: string; size: number }[] }[] }).shared,
   );
   expect(shared).toHaveLength(1);
   expect(shared[0].text).toBeUndefined();
-  expect(shared[0].files[0]).toMatchObject({ name: 'Invitation - Funke Bello.jpg', type: 'image/jpeg' });
+  expect(shared[0].files.map((f) => f.name)).toEqual(['Invitation - Funke Bello.jpg', 'Church invitation - Funke Bello.jpg']);
+  for (const f of shared[0].files) expect(f).toMatchObject({ type: 'image/jpeg' });
   expect(shared[0].files[0].size).toBeGreaterThan(50_000);
+  expect(shared[0].files[1].size).toBeGreaterThan(50_000);
 });
 
 // The suite runs as a Pixel 7; this one is a computer.
@@ -299,7 +303,7 @@ test.describe('on a computer', () => {
   const { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch } = devices['Desktop Chrome'];
   test.use({ viewport, userAgent, deviceScaleFactor, isMobile, hasTouch });
 
-  test('on a computer, sending on WhatsApp opens the chat and downloads the card to attach, even where the browser can share files', async ({
+  test('on a computer, sending on WhatsApp opens the chat and downloads the cards to attach, even where the browser can share files', async ({
     page,
     request,
   }) => {
@@ -319,12 +323,41 @@ test.describe('on a computer', () => {
       .locator('div', { hasText: 'Wale Johnson' })
       .filter({ has: page.getByRole('button', { name: /Send · WhatsApp/ }) })
       .last();
-    const download = page.waitForEvent('download');
+    const downloads: string[] = [];
+    page.on('download', (d) => downloads.push(d.suggestedFilename()));
     await row.getByRole('button', { name: /Send · WhatsApp/ }).click();
-    expect((await download).suggestedFilename()).toBe('Invitation - Wale Johnson.jpg');
-    await expect(page.getByText('Card downloaded. Attach it in the WhatsApp chat that just opened.')).toBeVisible();
+    // Invited to both weddings: both cards download.
+    await expect(page.getByText('Both cards downloaded. Attach them in the WhatsApp chat that just opened.')).toBeVisible();
+    await expect.poll(() => downloads.sort()).toEqual(['Church invitation - Wale Johnson.jpg', 'Invitation - Wale Johnson.jpg']);
     await expect(page.getByRole('dialog', { name: /Now send Wale’s card/ })).toBeHidden();
     expect(await page.evaluate(() => (window as unknown as { opened: string[] }).opened)).toHaveLength(1);
+  });
+
+  test('a guest invited to the church wedding only gets the church message and the church card', async ({ page, request }) => {
+    await addGuest(request, { name: 'Tolu Church', phone: '08013131313', events: ['church'] });
+    await page.route('**/api/admin/whatsapp*', (r) => r.fulfill({ json: { configured: false, ready: false } }));
+    await page.addInitScript(() => {
+      const w = window as unknown as { opened: string[] };
+      w.opened = [];
+      window.open = (url?: string | URL) => (w.opened.push(String(url)), null);
+    });
+    await page.goto(`${PUBLIC}/admin`);
+    await page.getByLabel('Password').fill('test-admin');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    const row = page
+      .locator('div', { hasText: 'Tolu Church' })
+      .filter({ has: page.getByRole('button', { name: /Send · WhatsApp/ }) })
+      .last();
+    await expect(row.getByText('Church only')).toBeVisible();
+    const download = page.waitForEvent('download');
+    await row.getByRole('button', { name: /Send · WhatsApp/ }).click();
+    expect((await download).suggestedFilename()).toBe('Church invitation - Tolu Church.jpg');
+    await expect(page.getByText('Card downloaded. Attach it in the WhatsApp chat that just opened.')).toBeVisible();
+    const text = decodeURIComponent((await page.evaluate(() => (window as unknown as { opened: string[] }).opened))[0]);
+    expect(text).toMatch(/^https:\/\/wa\.me\/2348013131313\?text=Dear Tolu Church,/);
+    expect(text).toContain('10:00 AM');
+    expect(text).not.toContain('/i/');
+    expect(text).not.toContain('traditional');
   });
 });
 
@@ -362,9 +395,9 @@ test('with WhatsApp Business, the desk sends each guest their card and message f
   await row.getByRole('button', { name: 'Message' }).click();
   const viaPhone = await page.evaluate(() => (window as unknown as { opened: string[] }).opened);
   expect(viaPhone[0]).toMatch(/^https:\/\/wa\.me\/2348077777777\?text=/);
-  const cardStep = page.getByRole('dialog', { name: /Now send Kemi’s card/ });
-  await expect(cardStep.getByRole('img', { name: 'Invitation card for Kemi Adeyemi' })).toBeVisible({ timeout: 20_000 });
-  await cardStep.getByRole('button', { name: 'Share card' }).click();
+  const cardStep = page.getByRole('dialog', { name: /Now send Kemi’s cards/ });
+  await expect(cardStep.getByRole('img', { name: 'Invitation card for Kemi Adeyemi', exact: true })).toBeVisible({ timeout: 20_000 });
+  await cardStep.getByRole('button', { name: 'Share cards' }).click();
   await expect(cardStep).toBeHidden();
 
   let meta = await (await request.get(`${META}/__sent`)).json();
@@ -627,6 +660,8 @@ test('church invitations put a person’s or a group’s name on the church card
     opened = r.request().url();
     return r.fulfill({ body: 'WhatsApp' });
   });
+  // The same in every browser: the card downloads (Chrome 156+ would otherwise open the share box over the list).
+  await page.evaluate(() => Object.assign(navigator, { canShare: () => false }));
   await adeyemi.getByRole('button', { name: 'WhatsApp' }).click();
   await expect.poll(() => opened).not.toBe('');
   const wa = new URL(opened);

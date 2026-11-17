@@ -33,6 +33,8 @@ export type WeddingConfig = {
   intro: { home: boolean; invite: boolean };
   invitationArt: { church: string; trad: string; nameSlot: { top: number; maxSize: number }; codeSlot: { top: number; left: number; size: number } };
   gifts: { message: string; accounts: { bank: string; name: string; number: string }[] };
+  /** The church card for people and groups, also sent to guests invited to the church wedding. */
+  churchCard: { art: string; nameSlot: { top: number; maxSize: number; wrapAt?: number; fit?: number }; ink: string };
   inviteMessage: string;
 };
 

@@ -58,6 +58,17 @@ const store = require('../src/store');
   const g = await r.json();
   assert.match(g.code, /^[A-HJ-NP-Z2-9]{6}$/);
   assert(g.message.includes(g.link) && g.message.includes('traditional'));
+  // The message follows the events ticked: both names both; traditional only is the private invitation;
+  // church only is the church invitation, pointing to the website (no private link).
+  assert(g.message.includes('10:00 AM') && g.message.includes('2:00 PM'), 'invited to both: both events');
+  const add = async (body) => (await req('/api/admin/guests', json('POST', body, admin))).json();
+  const onlyTrad = await add({ name: 'Ife Trad', events: ['trad'] });
+  assert(onlyTrad.message.includes(onlyTrad.link) && onlyTrad.message.includes('2:00 PM') && !onlyTrad.message.includes('10:00 AM'));
+  const onlyChurch = await add({ name: 'Ife Church', events: ['church'] });
+  assert(onlyChurch.message.startsWith('Dear Ife Church,') && onlyChurch.message.includes('10:00 AM'));
+  assert(!onlyChurch.message.includes('/i/') && !onlyChurch.message.includes('2:00 PM'), 'church only: no private link, no reception');
+  assert(onlyChurch.message.includes('/rsvp'), 'church only: the RSVP link while the church RSVP is open');
+  for (const x of [onlyTrad, onlyChurch]) await req(`/api/admin/guests/${x.id}`, { method: 'DELETE', headers: { cookie: admin } });
   r = await req('/api/admin/import', json('POST', { csv: 'Full Name,Phone,Side,Events\n"Ade, Jnr",0802,bride,church\nTope Omidiji,08031234567,groom,trad' }, admin));
   assert.deepEqual(await r.json(), { added: 1, skipped: ['Tope Omidiji'], whatsapp: null, email: null });
 
