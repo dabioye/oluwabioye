@@ -1,17 +1,18 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, Download, ImageDown, Link2, Mail, MessageCircle, Plus, Send, Upload } from 'lucide-react';
+import { Copy, Download, ImageDown, Link2, Mail, MessageCircle, Plus, Send, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { api, ApiError } from '@/lib/api';
-import { cfg } from '@/lib/config';
+import { cfg, type EventKey } from '@/lib/config';
 import { ago, longDate, weekday } from '@/lib/format';
 import { canShareImages, cardFileName, churchCardFileName, download, preloadCard, renderCard, type CardFile } from '@/lib/card-image';
-import type { Activity, EmailStatus, Guest, Side, SiteSettings, WhatsAppStatus } from '@/lib/types';
+import type { Activity, EmailStatus, Guest, InviteKind, Side, SiteSettings, WaSend, WhatsAppStatus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { StaffHeader, StaffPage } from '../staff-shell';
 import { GuestDialog } from './guest-dialog';
@@ -27,6 +28,16 @@ type Data = { guests: Guest[]; activity: Activity[]; inviteUrl: string };
 const getsCard = (g: Guest) => g.events.includes('trad');
 const getsChurchCard = (g: Guest) => g.events.includes('church');
 const church = cfg.churchCard;
+/** The invitations a guest should get: one per event they are invited to, traditional first. */
+const wants = (g: Guest): InviteKind[] => (['trad', 'church'] as const).filter((k) => g.events.includes(k));
+const sentId = (g: Guest, k: InviteKind) => (k === 'church' ? g.waChurchMessageId : g.waMessageId);
+const waState = (g: Guest, k: InviteKind) => (k === 'church' ? g.waChurchStatus : g.waStatus);
+const reachable = (g: Guest) => g.channel === 'whatsapp' && !!g.phone && g.rsvp !== 'no';
+const EVENT_CHOICES: { label: string; events: EventKey[] }[] = [
+  { label: 'Church only', events: ['church'] },
+  { label: 'Traditional only', events: ['trad'] },
+  { label: 'Both', events: ['church', 'trad'] },
+];
 
 async function copy(text: string, done: string) {
   try {
@@ -92,6 +103,12 @@ export function Desk() {
     [cardSrc, cardFor, nameFont],
   );
   const hasCards = (g: Guest) => (!!cardSrc && getsCard(g)) || getsChurchCard(g);
+  /** One of the guest's cards, for a WhatsApp Business send. */
+  const renderFor = useCallback(
+    (g: Guest, kind: InviteKind) =>
+      kind === 'church' ? renderCard({ src: church.art, name: g.name, nameSlot: church.nameSlot, ink: church.ink, font: nameFont }) : cardFor(g),
+    [cardFor, nameFont],
+  );
   const [cardStep, setCardStep] = useState<Guest | null>(null);
 
   // WhatsApp Business: when connected, invitations go out from the couple's number without opening WhatsApp.
@@ -108,7 +125,7 @@ export function Desk() {
     }
     refresh();
   }
-  const [waSending, setWaSending] = useState<Guest[] | null>(null);
+  const [waSending, setWaSending] = useState<WaSend[] | null>(null);
   useEffect(() => {
     api<WhatsAppStatus>('/api/admin/whatsapp').then(setWa, () => {});
     api<EmailStatus>('/api/admin/email').then(
@@ -116,12 +133,17 @@ export function Desk() {
       () => {},
     );
   }, []);
-  /**
-   * Can this guest's invitation go through WhatsApp Business? Its approved template is the traditional invitation,
-   * so only for guests invited to the traditional wedding (with their card, if the template needs one).
-   */
-  const viaApi = (g: Guest) =>
-    !!wa?.ready && g.channel === 'whatsapp' && !!g.phone && g.rsvp !== 'no' && getsCard(g) && (!wa.template?.needsImage || !!cardSrc);
+  /** Can this invitation go through WhatsApp Business (its template approved, and the card ready if it needs one)? */
+  const apiReady = (k: InviteKind) => (k === 'church' ? !!wa?.churchReady : !!wa?.ready && (!wa.template?.needsImage || !!cardSrc));
+  /** The guest's invitations that can go through WhatsApp Business. */
+  const apiKinds = (g: Guest) => (reachable(g) ? wants(g).filter(apiReady) : []);
+  const viaApi = (g: Guest) => apiKinds(g).length > 0;
+  const sendsFor = (list: Guest[], only?: (g: Guest, k: InviteKind) => boolean): WaSend[] =>
+    list.flatMap((g) =>
+      apiKinds(g)
+        .filter((k) => !only || only(g, k))
+        .map((kind) => ({ guest: g, kind })),
+    );
 
   /** Download every card for this guest; says how many. */
   async function saveCards(g: Guest) {
@@ -141,7 +163,7 @@ export function Desk() {
    * follows from the share sheet; desktop browsers can't share images, so the card is downloaded to attach.
    */
   async function sendWithCard(g: Guest) {
-    if (viaApi(g)) return setWaSending([g]);
+    if (viaApi(g)) return setWaSending(sendsFor([g]));
     return sendFromMyWhatsApp(g);
   }
 
@@ -191,7 +213,66 @@ export function Desk() {
   }
 
   const unsent = rows.filter((g) => stageOf(g) === 'new' && g.channel !== 'physical' && sendHref(g));
-  const waPending = guests.filter((g) => viaApi(g) && !g.waMessageId && g.waStatus !== 'failed').sort((a, b) => a.name.localeCompare(b.name));
+  const waPending = sendsFor(
+    [...guests].sort((a, b) => a.name.localeCompare(b.name)),
+    (g, k) => !sentId(g, k) && waState(g, k) !== 'failed',
+  );
+  const waPendingGuests = new Set(waPending.map((s) => s.guest.id)).size;
+
+  // Several guests at once: tick them, then change their events or resend their invitations.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const chosen = guests.filter((g) => picked.has(g.id));
+  const pick = (id: string, on: boolean) =>
+    setPicked((p) => {
+      const next = new Set(p);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  const shownPicked = rows.filter((g) => picked.has(g.id)).length;
+  const [busy, setBusy] = useState(false);
+
+  async function setEvents(events: EventKey[], label: string) {
+    setBusy(true);
+    try {
+      const r = await api<{ guests: Guest[] }>('/api/admin/guests/bulk', { body: { ids: chosen.map((g) => g.id), events } });
+      // Invitations they are now owed (e.g. the church one for guests just added to the church wedding).
+      const owed = sendsFor(r.guests, (g, k) => !sentId(g, k));
+      const n = r.guests.length;
+      toast.success(`${n} ${n === 1 ? 'guest' : 'guests'} set to ${label.toLowerCase()}`, {
+        ...(owed.length && {
+          description: `${owed.length} ${owed.length === 1 ? 'invitation hasn’t' : 'invitations haven’t'} been sent to them yet.`,
+          action: { label: 'Send now', onClick: () => setWaSending(owed) },
+          duration: 15_000,
+        }),
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Couldn’t update the guests');
+    }
+    setBusy(false);
+    refresh();
+  }
+
+  /** Resend the selected guests every invitation WhatsApp Business can send them. */
+  function resendPicked() {
+    const sends = sendsFor(chosen);
+    const left = chosen.filter((g) => !apiKinds(g).length);
+    const churchWaiting = chosen.some((g) => reachable(g) && g.events.includes('church')) && !apiReady('church');
+    if (!sends.length) {
+      toast.error(
+        !wa?.ready && !wa?.churchReady
+          ? 'WhatsApp Business isn’t ready, so send these one at a time with Message.'
+          : 'None of these can be sent on WhatsApp Business: they need a WhatsApp number, WhatsApp as how to send, and not to have declined.',
+      );
+      return;
+    }
+    const notes = [
+      left.length && `${left.length} skipped (no WhatsApp number, not sent by WhatsApp, or declined): ${left.map((g) => g.name).join(', ')}.`,
+      churchWaiting && 'Church invitations can’t go on WhatsApp Business until the church template is approved, so only the traditional ones will be sent.',
+    ].filter(Boolean);
+    if (notes.length) toast.info(notes.join(' '), { duration: 12_000 });
+    setWaSending(sends);
+  }
   const total = guests.length || 1;
   const sent = guests.filter((g) => g.sentAt || g.cardDelivered).length;
   const opened = guests.filter((g) => g.openedAt).length;
@@ -325,7 +406,8 @@ export function Desk() {
             {waPending.length > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-[#1f7a4d]/15 px-3 py-2.5 text-[0.85rem]">
                 <span>
-                  {waPending.length} {waPending.length === 1 ? 'guest hasn’t' : 'guests haven’t'} had their WhatsApp invitation yet
+                  {waPendingGuests} {waPendingGuests === 1 ? 'guest hasn’t' : 'guests haven’t'} had their WhatsApp{' '}
+                  {waPending.length > waPendingGuests ? `invitations yet (${waPending.length} to send)` : 'invitation yet'}
                 </span>
                 <Button size="sm" className="bg-[#1f7a4d] text-white hover:bg-[#25915b]" onClick={() => setWaSending(waPending)}>
                   <Send /> Send all pending via WhatsApp
@@ -350,6 +432,23 @@ export function Desk() {
               </div>
             )}
 
+            {rows.length > 0 && (
+              <label className="flex w-fit cursor-pointer items-center gap-2.5 px-1 text-[0.8rem] text-ivory-dim">
+                <Checkbox
+                  checked={shownPicked === rows.length ? true : shownPicked ? 'indeterminate' : false}
+                  onCheckedChange={(on) =>
+                    setPicked((p) => {
+                      const next = new Set(p);
+                      rows.forEach((g) => (on === true ? next.add(g.id) : next.delete(g.id)));
+                      return next;
+                    })
+                  }
+                  className="border-gold/50"
+                />
+                Select all {rows.length} shown
+              </label>
+            )}
+
             <div aria-live="polite" className="grid">
               {!data ? (
                 <p className="py-8 text-center text-ivory-dim">Loading guests…</p>
@@ -370,10 +469,45 @@ export function Desk() {
                     onEmail={mailReady && g.email ? () => sendEmail(g) : undefined}
                     viaApi={viaApi(g)}
                     onCard={hasCards(g) ? () => saveCards(g) : undefined}
+                    picked={picked.has(g.id)}
+                    onPick={(on) => pick(g.id, on)}
                   />
                 ))
               )}
             </div>
+
+            {chosen.length > 0 && (
+              <div
+                role="toolbar"
+                aria-label="Selected guests"
+                className="sticky bottom-3 z-10 grid gap-2 rounded-md border border-gold/40 bg-navy-2 px-3 py-2.5 text-[0.85rem] shadow-lg"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <b className="font-medium">{chosen.length} selected</b>
+                  <Button size="sm" variant="ghost" className="h-7 text-ivory-dim" onClick={() => setPicked(new Set())}>
+                    <X /> Clear
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="mr-1 text-ivory-dim">Invite to</span>
+                  {EVENT_CHOICES.map((c) => (
+                    <Button
+                      key={c.label}
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      className="border-gold/40 bg-transparent text-gold"
+                      onClick={() => setEvents(c.events, c.label)}
+                    >
+                      {c.label}
+                    </Button>
+                  ))}
+                  <Button size="sm" disabled={busy} className="bg-[#1f7a4d] text-white hover:bg-[#25915b] sm:ml-auto" onClick={resendPicked}>
+                    <Send /> Resend invitations
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -401,7 +535,7 @@ export function Desk() {
       {wa?.configured && <WhatsAppPanel wa={wa} />}
 
       <GuestDialog open={editing !== undefined} guest={editing ?? null} groups={groups} onClose={() => setEditing(undefined)} onSaved={refresh} />
-      {wa && <WhatsAppSendDialog guests={waSending} wa={wa} render={cardFor} onProgress={refresh} onClose={() => setWaSending(null)} />}
+      {wa && <WhatsAppSendDialog sends={waSending} wa={wa} render={renderFor} onProgress={refresh} onClose={() => setWaSending(null)} />}
       <SendCardDialog guest={cardStep} render={cardsFor} onClose={() => setCardStep(null)} />
       <ImportDialog open={importing} onClose={() => setImporting(false)} onImported={refresh} />
     </StaffPage>
@@ -418,6 +552,8 @@ function GuestRow({
   onEmail,
   viaApi,
   onCard,
+  picked,
+  onPick,
 }: {
   g: Guest;
   onEdit: () => void;
@@ -430,6 +566,8 @@ function GuestRow({
   onEmail?: () => void;
   viaApi: boolean;
   onCard?: () => void;
+  picked: boolean;
+  onPick: (on: boolean) => void;
 }) {
   const st = stageOf(g);
   const href = sendHref(g);
@@ -442,33 +580,49 @@ function GuestRow({
     g.table && `T${g.table}`,
   ].filter(Boolean) as string[];
   return (
-    <div className="grid items-center gap-3 border-t border-hairline-soft px-1 py-3 first:border-0 md:grid-cols-[minmax(0,1fr)_130px_auto]">
-      <button type="button" onClick={onEdit} className="min-w-0 cursor-pointer border-0 bg-transparent p-0 text-left">
-        <b className="block font-medium [overflow-wrap:anywhere] text-ivory">
-          {g.name}
-          {tags.map((t) => (
-            <Badge key={t} variant="outline" className="ml-1.5 border-gold/30 align-middle text-[0.65rem] font-normal text-ivory-dim">
-              {t}
+    <div
+      className={cn(
+        'grid items-center gap-3 border-t border-hairline-soft px-1 py-3 first:border-0 md:grid-cols-[minmax(0,1fr)_130px_auto]',
+        picked && 'bg-gold/5',
+      )}
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <Checkbox checked={picked} onCheckedChange={(on) => onPick(on === true)} aria-label={`Select ${g.name}`} className="mt-1 border-gold/50" />
+        <button type="button" onClick={onEdit} className="min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left">
+          <b className="block font-medium [overflow-wrap:anywhere] text-ivory">
+            {g.name}
+            {tags.map((t) => (
+              <Badge key={t} variant="outline" className="ml-1.5 border-gold/30 align-middle text-[0.65rem] font-normal text-ivory-dim">
+                {t}
+              </Badge>
+            ))}
+          </b>
+          <small className="text-[0.78rem] [overflow-wrap:anywhere] text-ivory-dim">{meta}</small>
+          {(
+            [
+              [g.waStatus, g.waError, ''],
+              [g.waChurchStatus, g.waChurchError, g.waStatus ? ' (church)' : ''],
+            ] as const
+          ).map(([s, err, which]) =>
+            s ? (
+              <Badge key={which} variant="outline" className={cn('mt-1 mr-1 text-[0.65rem] font-normal', WA_TAG[s].className)} title={err || undefined}>
+                {WA_TAG[s].label}
+                {which}
+                {s === 'failed' && err ? `: ${err}` : ''}
+              </Badge>
+            ) : null,
+          )}
+          {(g.emailSentAt || g.emailError) && (
+            <Badge
+              variant="outline"
+              className={cn('mt-1 ml-1 text-[0.65rem] font-normal', g.emailError ? 'border-bad/50 text-bad' : 'border-ok/40 text-ok')}
+              title={g.emailError || undefined}
+            >
+              {g.emailError ? `Email failed: ${g.emailError}` : 'Email sent'}
             </Badge>
-          ))}
-        </b>
-        <small className="text-[0.78rem] [overflow-wrap:anywhere] text-ivory-dim">{meta}</small>
-        {g.waStatus && (
-          <Badge variant="outline" className={cn('mt-1 text-[0.65rem] font-normal', WA_TAG[g.waStatus].className)} title={g.waError || undefined}>
-            {WA_TAG[g.waStatus].label}
-            {g.waStatus === 'failed' && g.waError ? `: ${g.waError}` : ''}
-          </Badge>
-        )}
-        {(g.emailSentAt || g.emailError) && (
-          <Badge
-            variant="outline"
-            className={cn('mt-1 ml-1 text-[0.65rem] font-normal', g.emailError ? 'border-bad/50 text-bad' : 'border-ok/40 text-ok')}
-            title={g.emailError || undefined}
-          >
-            {g.emailError ? `Email failed: ${g.emailError}` : 'Email sent'}
-          </Badge>
-        )}
-      </button>
+          )}
+        </button>
+      </div>
       <div>
         <Badge variant="outline" className={cn('text-[0.7rem]', PILL[st].className)} title={g.rsvpNote || undefined}>
           {PILL[st].label}
@@ -482,7 +636,7 @@ function GuestRow({
           </Button>
         ) : href && g.channel === 'whatsapp' ? (
           <Button size="sm" className="bg-[#1f7a4d] text-white hover:bg-[#25915b]" onClick={onSendWhatsApp}>
-            <Send /> {(viaApi ? g.waMessageId : g.sentAt) ? 'Resend' : 'Send'} · WhatsApp
+            <Send /> {(viaApi ? g.waMessageId || g.waChurchMessageId : g.sentAt) ? 'Resend' : 'Send'} · WhatsApp
           </Button>
         ) : g.channel === 'email' && onEmail ? (
           <Button size="sm" onClick={onEmail}>
@@ -539,10 +693,21 @@ function GuestRow({
 /** What the desk knows about the WhatsApp Business connection. */
 function WhatsAppPanel({ wa }: { wa: WhatsAppStatus }) {
   const t = wa.template;
+  const c = wa.churchTemplate;
   const rows: [string, string][] = [
     ['From', [wa.phone?.display_phone_number, wa.phone?.verified_name].filter(Boolean).join(' · ') || '—'],
     ['Template', t ? `${t.name} · ${t.language} · ${t.fallback ? 'not read from Meta' : `${t.category.toLowerCase()}, ${t.status.toLowerCase()}`}` : '—'],
     ['Card', t?.needsImage ? 'Each guest’s card goes with their message' : 'No image in the template'],
+    [
+      'Church template',
+      !c
+        ? '—'
+        : c.error
+          ? /No template called/.test(c.error)
+            ? `${c.name} isn’t in WhatsApp Manager yet, so church invitations go by hand`
+            : `couldn’t read ${c.name}: ${c.error}`
+          : `${c.name} · ${c.language} · ${c.category.toLowerCase()}, ${c.status.toLowerCase()}${wa.churchReady ? '' : ' (church invitations go by hand until it’s approved)'}`,
+    ],
     ['Number quality', wa.phone?.quality_rating ? wa.phone.quality_rating.toLowerCase() : '—'],
     ['Access token', wa.token?.error ? 'couldn’t check' : wa.token?.expiresAt ? `expires ${wa.token.expiresAt.slice(0, 10)}` : 'never expires'],
     ['Automatic sending', wa.autoSend ? 'on (Edit website)' : 'off (Edit website)'],

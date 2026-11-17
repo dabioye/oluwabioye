@@ -127,7 +127,8 @@ module.exports = {
   nameFonts: ['Pinyon Script', 'Cookie', 'MonteCarlo', 'Lavishly Yours'],
 
   // WhatsApp Business (Cloud API): the sending number and the approved template. The token is the WHATSAPP_TOKEN secret.
-  whatsapp: { phoneNumberId: '1170328419507856', businessAccountId: '27648081441479141', template: 'oluwabioye_invitation' },
+  // churchTemplate is the church-wedding invitation, sent with the church card (README: Templates).
+  whatsapp: { phoneNumberId: '1170328419507856', businessAccountId: '27648081441479141', template: 'oluwabioye_invitation', churchTemplate: 'oluwabioye_church_invitation' },
   // Sent with the church card. {rsvp} becomes a line with the RSVP link while the church RSVP is open.
   churchMessage:
     'Dear {name},\n\nSarah & Damilare joyfully invite you to their wedding on {weekday}, 17 December 2026 at 10:00 AM, at RCCG Garden of Peace, Region 52 Headquarters, 78/80 Falolu Road, Surulere, Lagos.\n\nDetails and directions: {link}{rsvp}\n\nWe look forward to celebrating with you.',

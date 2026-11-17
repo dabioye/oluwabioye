@@ -220,7 +220,7 @@ const store = require('../src/store');
     const call = { path: u.pathname, auth: opts.headers.Authorization, body: opts.body };
     meta.calls.push(call);
     if (u.pathname === '/debug_token') return reply(200, { data: { is_valid: true, expires_at: 0, granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['WABA1'] }] } });
-    if (u.pathname === '/WABA1/message_templates') return reply(200, { data: [meta.template, meta.alert].filter((t) => t.name === u.searchParams.get('name')) });
+    if (u.pathname === '/WABA1/message_templates') return reply(200, { data: [meta.template, meta.alert, meta.church].filter(Boolean).filter((t) => t.name === u.searchParams.get('name')) });
     if (u.pathname === '/PHONE1') return reply(200, { display_phone_number: '+234 807 269 2636', verified_name: 'Dabioye Solutions', quality_rating: 'GREEN' });
     if (u.pathname === '/PHONE1/media') return reply(200, { id: 'MEDIA1' });
     if (u.pathname === '/PHONE1/messages') {
@@ -391,6 +391,60 @@ const store = require('../src/store');
   assert.deepEqual(await cardUploaded(), ['jpeg', 1024, 1536]);
   r = await req('/api/admin/guests', json('POST', { name: 'Auto Church Only', phone: '08030000012', events: ['church'] }, admin));
   assert.equal((await r.json()).whatsapp, null, 'no traditional card for a church-only guest');
+
+  // The church template: once approved, church guests get it with their church card (drawn from the public
+  // site's artwork), guests invited to both get both, and each send is tracked on its own
+  const churchArt = require('fs').readFileSync(require('path').join(__dirname, '../../web/site-assets/public/img/church-card.jpg'));
+  const realFetch = global.fetch;
+  global.fetch = (url, o) => (String(url) === 'http://public.test/img/church-card.jpg' ? Promise.resolve(new Response(churchArt)) : realFetch(url, o));
+  let st2 = await (await req('/api/admin/whatsapp', { headers: { cookie: admin } })).json();
+  assert.equal(st2.churchReady, false, 'no church template yet');
+  assert.match(st2.churchTemplate.error, /No template called “oluwabioye_church_invitation”/);
+  meta.church = {
+    name: 'oluwabioye_church_invitation', language: 'en_GB', status: 'APPROVED', category: 'MARKETING',
+    components: [
+      { type: 'HEADER', format: 'IMAGE' },
+      { type: 'BODY', text: 'Dear {{1}}, … We look forward to celebrating with you.', example: { body_text: [['Tope Omidiji']] } },
+      { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Details and directions', url: 'http://public.test' }] },
+    ],
+  };
+  wa._reset();
+  st2 = await (await req(`/api/admin/whatsapp?guest=${churchOnly.id}&kind=church`, { headers: { cookie: admin } })).json();
+  assert.equal(st2.churchReady, true);
+  assert.equal(st2.preview, 'Dear Church Only, … We look forward to celebrating with you.');
+  r = await req('/api/admin/guests', json('POST', { name: 'Both Events', phone: '08030000014' }, admin));
+  const both = await r.json();
+  assert.equal(both.whatsapp.sent, 2, 'auto-send sends both invitations: ' + JSON.stringify(both.whatsapp));
+  const bothSends = sendsTo('2348030000014');
+  assert.deepEqual(bothSends.map((m) => m.template.name), ['oluwabioye_invitation', 'oluwabioye_church_invitation'], 'traditional first, then church');
+  assert.deepEqual(await cardUploaded(), ['jpeg', 1024, 1536], 'the church card was drawn on the server');
+  const bothNow = await store.byId(both.id);
+  assert(bothNow.waMessageId && bothNow.waChurchMessageId && bothNow.waMessageId !== bothNow.waChurchMessageId);
+  await req('/api/admin/site', json('PUT', { waAutoSend: false }, admin));
+  r = await req('/api/admin/whatsapp/send-pending', json('POST', {}, admin));
+  assert.equal(r.status, 200);
+  assert((await store.byId(churchOnly.id)).waChurchMessageId, 'church-only guests are sent the church invitation');
+  assert.equal(sendsTo('2348030000010').at(-1).template.name, 'oluwabioye_church_invitation');
+  assert((await store.byId(waiting.id)).waChurchMessageId, 'guests already sent the traditional one get the church one too');
+  // The church message's delivery is tracked separately
+  const chHook = JSON.stringify({ entry: [{ changes: [{ value: { statuses: [{ id: bothNow.waChurchMessageId, status: 'delivered' }] } }] }] });
+  await req('/api/whatsapp/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': 'sha256=' + require('crypto').createHmac('sha256', 'appsecret').update(chHook).digest('hex') }, body: chHook });
+  assert.deepEqual([(await store.byId(both.id)).waChurchStatus, (await store.byId(both.id)).waStatus], ['delivered', 'accepted']);
+  // Resending one invitation by kind
+  r = await req(`/api/admin/guests/${both.id}/whatsapp?kind=church`, { method: 'POST', headers: { cookie: admin } });
+  assert.equal(r.status, 200);
+  assert.notEqual((await store.byId(both.id)).waChurchMessageId, bothNow.waChurchMessageId, 'a resend records the new message');
+  global.fetch = realFetch;
+  await req('/api/admin/site', json('PUT', { waAutoSend: true }, admin));
+
+  // Several guests at once: change the events they are invited to
+  r = await req('/api/admin/guests/bulk', json('POST', { ids: [both.id, waiting.id, 'nope'], events: ['church'] }, admin));
+  const bulk = await r.json();
+  assert.equal(bulk.guests.length, 2);
+  assert(bulk.guests.every((x) => x.events.join() === 'church' && x.message.startsWith('Dear ')), 'returned with their new message');
+  assert.deepEqual((await store.byId(waiting.id)).events, ['church']);
+  assert.equal((await req('/api/admin/guests/bulk', json('POST', { ids: [both.id], events: [] }, admin))).status, 400);
+  assert.equal((await req('/api/admin/guests/bulk', json('POST', { ids: [both.id], events: ['trad'] }, gate))).status, 401);
 
   // ---------- Email invitations (a stand-in mail server) ----------
   const mail = require('../src/email');

@@ -142,6 +142,21 @@ The site reads each template from Meta (language, image header, variables, butto
 
 **`oluwabioye_invitation`** (approved, Marketing). If its header is an **Image**, each guest's personalised card is sent as that image. Without an image header, the message goes out on its own. The body variables are filled by their sample values: a name sample gets the guest's name, and a date sample gets the RSVP date. A dynamic **View invitation** button `https://oluwabioye.dabioye.com/i/{{1}}` gets the guest's code.
 
+**`oluwabioye_church_invitation`** (Marketing, English), the church-wedding invitation with the guest's church card. Guests invited to the church wedding get it; guests invited to both get the traditional invitation first, then this one. Until it is approved, church invitations go from the desk by hand, and the WhatsApp Business panel says so.
+- **Header:** Image. For the sample, upload any guest's church card (download one with **Card** on the desk).
+- **Body:**
+  ```
+  Dear {{1}},
+
+  Sarah & Damilare joyfully invite you to their wedding on Thursday, 17 December 2026 at 10:00 AM, at RCCG Garden of Peace, Region 52 Headquarters, 78/80 Falolu Road, Surulere, Lagos.
+
+  We look forward to celebrating with you.
+  ```
+  Sample for `{{1}}`: `Tope Omidiji`.
+- **Button:** Visit website · text `Details and directions` · **Static** URL `https://sarahanddamilare.dabioye.com`.
+
+It is Marketing, not Utility: Meta treats an invitation nobody asked for as marketing, and moves a template submitted as Utility to Marketing if its wording is promotional.
+
 **`guest_reply_alert`** (Utility, English), the alert sent to your own phone when a guest replies:
 - **Body:**
   ```
@@ -179,7 +194,7 @@ Meta app → WhatsApp → Configuration → Webhook:
 ### 4. Turn it on
 
 1. Test with **Send · WhatsApp** on a guest entry with your own number.
-2. Optionally tick **Edit website → WhatsApp invitations → Send automatically**. Guests are then sent their invitation as soon as they're added or imported. With an image template, the server draws each guest's personalised card (`functions/src/card.js`, laid out exactly like the desk's card), so automatic sends and **Send all pending** include it too. Only guests invited to the traditional wedding are sent the card template.
+2. Optionally tick **Edit website → WhatsApp invitations → Send automatically**. Guests are then sent their invitation as soon as they're added or imported. With an image template, the server draws each guest's personalised card (`functions/src/card.js`, laid out exactly like the desk's card), so automatic sends and **Send all pending** include it too. Each guest is sent the template for each event they are invited to (traditional, church, or both), and each send is tracked on its own.
 3. Use **Send all pending via WhatsApp** for everyone else. Guests marked "Printed card" or who declined are skipped.
 
 A new WhatsApp Business account can message about 250 people a day, which covers the whole guest list.
@@ -239,6 +254,7 @@ Set it up like this:
 2. With WhatsApp Business connected (above), tap **Send all pending via WhatsApp**, or **Send · WhatsApp** on a guest. Without it, filter **Not sent** and tap **Send next on WhatsApp** (or **Send · WhatsApp** on a guest). Guests invited to the traditional wedding get their **personalised card** (their name and access code on the card) as well as the message. WhatsApp opens the guest's chat with the message ready, so send it. On a phone, come back to the desk and tap **Share card**, pick WhatsApp, then the guest (top of your recent chats). On a laptop the card is downloaded instead, so attach it in the chat. WhatsApp can't take an image and a caption from a link, and drops the text when an image is shared, so they go as two messages. **Card** downloads a guest's card on its own. The message reminds guests the link is personal. Guests who lose the link can type their code (the last 6 characters of the link) on `oluwabioye.dabioye.com`.
 3. For printed cards, set *Send via → Printed card* and tick **Card given**.
 4. Chase **Sent, not opened** and **Opened, no reply** before the RSVP date.
+5. To change several guests at once, tick them (or **Select all shown** after a search or filter). The bar that appears sets them all to **Church only**, **Traditional only** or **Both**, and offers to send any invitation they're now owed. **Resend invitations** sends each ticked guest every invitation WhatsApp Business can send them again.
 
 ## On the day
 

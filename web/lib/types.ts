@@ -89,6 +89,10 @@ export type Guest = {
   waMessageId?: string;
   waStatus?: 'accepted' | 'sent' | 'delivered' | 'read' | 'failed';
   waError?: string;
+  /** The church invitation sent through WhatsApp Business, tracked apart from the traditional one. */
+  waChurchMessageId?: string;
+  waChurchStatus?: 'accepted' | 'sent' | 'delivered' | 'read' | 'failed';
+  waChurchError?: string;
   waSentAt?: string;
   waReadAt?: string;
   /** Email invitation: when it was sent, or why the mail server refused it. */
@@ -104,21 +108,25 @@ export type WhatsAppStatus = {
   problems?: string[];
   token?: { valid?: boolean; expiresAt?: string | null; error?: string };
   phone?: { display_phone_number?: string; verified_name?: string; quality_rating?: string; error?: string };
-  template?: {
-    name: string;
-    language: string;
-    status: string;
-    /** True when the template couldn't be read from Meta and the README layout is assumed. */
-    fallback?: boolean;
-    category: string;
-    header: string;
-    needsImage: boolean;
-    body: string;
-    footer: string;
-    buttons: { type: string; text: string; url: string }[];
-  };
+  template?: WhatsAppTemplate;
+  /** The church-wedding template; `error` when it can't be read (e.g. not created yet). */
+  churchTemplate?: WhatsAppTemplate & { error?: string };
+  churchReady?: boolean;
   /** The message as the guest asked about (?guest=id) will read it. */
   preview?: string;
+};
+export type WhatsAppTemplate = {
+  name: string;
+  language: string;
+  status: string;
+  /** True when the template couldn't be read from Meta and the README layout is assumed. */
+  fallback?: boolean;
+  category: string;
+  header: string;
+  needsImage: boolean;
+  body: string;
+  footer: string;
+  buttons: { type: string; text: string; url: string }[];
 };
 export type Activity = { at: string; type: string; guestId: string | null; name: string; extra: string };
 /** A church invitation card made for a person or a group (no code: the church wedding is open). */
@@ -223,3 +231,7 @@ export type InboxConversation = {
 export type PublicWish = { id: string; name: string; message: string; at: string };
 /** The same message as the admin sees it, waiting for approval, shown or hidden. */
 export type Wish = { id: string; name: string; message: string; status: 'pending' | 'approved' | 'hidden'; createdAt: string; reviewedAt: string | null };
+/** The two invitations: the private traditional one (with the access card) and the church one (with the church card). */
+export type InviteKind = 'trad' | 'church';
+/** One WhatsApp Business send: a guest and which of their invitations. */
+export type WaSend = { guest: Guest; kind: InviteKind };

@@ -1,4 +1,4 @@
-// Draws a guest's personalised traditional invitation (card + name + access code) as a JPEG on the server,
+// Draws a guest's personalised traditional invitation (card + name + access code), or their church card (name only), as a JPEG on the server,
 // for WhatsApp sends that don't come from the invitation desk (automatic sends, Send all pending).
 // It follows the desk's canvas drawing (web/lib/card-image.ts) step by step: the text is turned into
 // outlines with the same fonts and laid over the card, so both cards look the same.
@@ -46,7 +46,8 @@ function spaced(f, code, px, cx, cy) {
 }
 
 /** The card as JPEG, with the guest's name and code set into it. `image` is the card artwork. */
-async function renderCard({ image, name, code, nameSlot, codeSlot, font: family }) {
+/** `ink` (the church card) sets the text colour and, like the desk, leaves out the shadow. */
+async function renderCard({ image, name, code, nameSlot, codeSlot, font: family, ink }) {
   const base = sharp(image).rotate();
   const { width: W, height: H } = await base.metadata();
 
@@ -64,8 +65,8 @@ async function renderCard({ image, name, code, nameSlot, codeSlot, font: family 
   const dy = namePx * 0.03;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
   <defs><filter id="s" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="${blur.toFixed(2)}"/></filter></defs>
-  <g fill="#000" fill-opacity="0.5" filter="url(#s)" transform="translate(0 ${dy.toFixed(2)})"><path d="${nameD}"/><path d="${codeD}"/></g>
-  <g fill="${INK}"><path d="${nameD}"/><path d="${codeD}"/></g>
+  ${ink ? '' : `<g fill="#000" fill-opacity="0.5" filter="url(#s)" transform="translate(0 ${dy.toFixed(2)})"><path d="${nameD}"/><path d="${codeD}"/></g>`}
+  <g fill="${ink || INK}"><path d="${nameD}"/><path d="${codeD}"/></g>
 </svg>`;
   return base.composite([{ input: Buffer.from(svg), top: 0, left: 0 }]).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
 }
