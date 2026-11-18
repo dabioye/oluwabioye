@@ -7,11 +7,19 @@ const COL = 'churchCards';
 const str = (v, max) => String(v ?? '').trim().slice(0, max);
 
 /** A clean entry, or { error } explaining what to fix. */
+/** A phone number typed at the end of the name ("Shalom Guard 0802 144 1005") goes in the number instead. */
+const TRAILING_PHONE = /^(.*?)[\s,;]+(\+?\d[\d\s()-]{6,}\d)$/;
+function splitPhone(name, phone) {
+  const m = !phone && name.match(TRAILING_PHONE);
+  return m && m[1].trim() ? { name: m[1].trim(), phone: m[2] } : { name, phone };
+}
+
 function clean(input = {}) {
+  const { name, phone } = splitPhone(str(input.name, 80).replace(/\s+/g, ' '), str(input.phone, 30));
   const card = {
     id: crypto.randomUUID(),
-    name: str(input.name, 80).replace(/\s+/g, ' '),
-    phone: str(input.phone, 30),
+    name,
+    phone,
     sentAt: null,
     createdAt: new Date().toISOString(),
   };

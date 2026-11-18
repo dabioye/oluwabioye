@@ -575,6 +575,14 @@ const store = require('../src/store');
   r = await req(`/api/admin/church-cards/${made[1].id}`, json('PATCH', { sent: true }, admin));
   assert((await r.json()).sentAt, 'marked sent');
   assert.equal((await req('/api/admin/church-cards/nope', json('PATCH', { sent: true }, admin))).status, 404);
+  // A number typed at the end of the name goes in the number.
+  r = await (await req('/api/admin/church-cards', json('POST', { name: 'Shalom Guard 0802 144 1005' }, admin))).json();
+  assert.equal(r.cards[0].name, 'Shalom Guard');
+  assert.equal(r.cards[0].phone, '0802 144 1005');
+  await req(`/api/admin/church-cards/${r.cards[0].id}`, { method: 'DELETE', headers: { cookie: admin } });
+  r = await (await req('/api/admin/church-cards', json('POST', { name: 'Choir 2' }, admin))).json();
+  assert.equal(r.cards[0].name, 'Choir 2', 'a short number stays in the name');
+  await req(`/api/admin/church-cards/${r.cards[0].id}`, { method: 'DELETE', headers: { cookie: admin } });
   assert.equal((await req(`/api/admin/church-cards/${made[0].id}`, { method: 'DELETE', headers: { cookie: admin } })).status, 200);
   cc = await (await req('/api/admin/church-cards', { headers: { cookie: admin } })).json();
   assert.deepEqual(cc.cards.map((c) => c.name), ['Aunty Bose']);
