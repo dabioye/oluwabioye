@@ -739,6 +739,24 @@ test('church invitations put a person’s or a group’s name on the church card
   await expect(adeyemi).toContainText('0803 123 4567');
   await expect(adeyemi).toContainText('Not sent');
 
+  // A name or number can be corrected in place; Escape leaves it as it was.
+  const bello = list.getByRole('listitem').filter({ hasText: `The Bello Family ${t}` });
+  await bello.getByRole('button', { name: `Edit The Bello Family ${t}` }).click();
+  const edit = list.getByRole('form', { name: `Edit The Bello Family ${t}` });
+  await edit.getByLabel('Name on the card').fill(`Dr & Mrs Bello ${t}`);
+  await edit.getByLabel('WhatsApp number').fill('0805 765 4321');
+  await edit.getByRole('button', { name: 'Save' }).click();
+  const drBello = list.getByRole('listitem').filter({ hasText: `Dr & Mrs Bello ${t}` });
+  await expect(drBello).toContainText('0805 765 4321');
+  await expect(list.getByText(`The Bello Family ${t}`)).toHaveCount(0);
+  await drBello.getByRole('button', { name: `Edit Dr & Mrs Bello ${t}` }).click();
+  await list
+    .getByRole('form', { name: `Edit Dr & Mrs Bello ${t}` })
+    .getByLabel('Name on the card')
+    .fill('Someone else');
+  await page.keyboard.press('Escape');
+  await expect(drBello).toContainText(`Dr & Mrs Bello ${t}`);
+
   // WhatsApp opens their chat with the message (website and RSVP, no private link), and the card follows.
   let opened = '';
   await context.route('https://wa.me/**', (r) => {
