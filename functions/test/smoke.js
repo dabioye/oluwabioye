@@ -575,6 +575,25 @@ const store = require('../src/store');
   r = await req(`/api/admin/church-cards/${made[1].id}`, json('PATCH', { sent: true }, admin));
   assert((await r.json()).sentAt, 'marked sent');
   assert.equal((await req('/api/admin/church-cards/nope', json('PATCH', { sent: true }, admin))).status, 404);
+  // Sent from the couple's WhatsApp Business number with the church template: a preview first, then the send.
+  r = await (await req(`/api/admin/church-cards/${made[1].id}/whatsapp`, { headers: { cookie: admin } })).json();
+  assert.equal(r.preview, 'Dear Aunty Bose, … We look forward to celebrating with you.');
+  r = await req(`/api/admin/church-cards/${made[1].id}/whatsapp`, { method: 'POST', headers: { cookie: admin, 'Content-Type': 'image/jpeg' }, body: churchArt });
+  let sentCard = await r.json();
+  assert.equal(r.status, 200, JSON.stringify(sentCard));
+  assert.equal(sentCard.card.waStatus, 'accepted');
+  const bose = sendsTo('2348030001111').at(-1);
+  assert.equal(bose.template.name, 'oluwabioye_church_invitation');
+  assert.equal(bose.template.components.find((c) => c.type === 'body').parameters[0].text, 'Aunty Bose');
+  assert(bose.template.components.find((c) => c.type === 'header').parameters[0].image.id, 'the card goes with it');
+  const boseHook = { entry: [{ changes: [{ value: { statuses: [{ id: sentCard.id, status: 'read' }] } }] }] };
+  assert.equal((await req('/api/whatsapp/webhook', signed(boseHook))).status, 200);
+  cc = await (await req('/api/admin/church-cards', { headers: { cookie: admin } })).json();
+  assert.equal(cc.cards.find((c) => c.id === made[1].id).waStatus, 'read', 'its delivery is followed');
+  // A group with no number goes from the couple's phone instead.
+  r = await req(`/api/admin/church-cards/${made[0].id}/whatsapp`, { method: 'POST', headers: { cookie: admin } });
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).error, /no WhatsApp number/);
   // A number typed at the end of the name goes in the number.
   r = await (await req('/api/admin/church-cards', json('POST', { name: 'Shalom Guard 0802 144 1005' }, admin))).json();
   assert.equal(r.cards[0].name, 'Shalom Guard');

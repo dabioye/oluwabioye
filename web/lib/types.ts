@@ -138,7 +138,18 @@ export type WhatsAppTemplate = {
 };
 export type Activity = { at: string; type: string; guestId: string | null; name: string; extra: string };
 /** A church invitation card made for a person or a group (no code: the church wedding is open). */
-export type ChurchCard = { id: string; name: string; phone: string; sentAt: string | null; createdAt: string; message: string };
+export type ChurchCard = {
+  id: string;
+  name: string;
+  phone: string;
+  sentAt: string | null;
+  createdAt: string;
+  message: string;
+  /** Sends from the couple's WhatsApp Business number, and how far the last one got. */
+  waMessageId?: string;
+  waStatus?: 'accepted' | 'sent' | 'delivered' | 'read' | 'failed';
+  waError?: string;
+};
 export type ChurchCardArt = { art: string; nameSlot: { top: number; maxSize: number; wrapAt?: number; fit?: number }; ink: string };
 
 export type ChurchRsvp = {
@@ -243,5 +254,5 @@ export type Wish = { id: string; name: string; message: string; status: 'pending
 export type InviteKind = 'trad' | 'church';
 /** What a WhatsApp Business send carries: one of the invitations, or the countdown reminder. */
 export type SendKind = InviteKind | 'reminder';
-/** One WhatsApp Business send: a guest and which message. */
-export type WaSend = { guest: Guest; kind: SendKind };
+/** One WhatsApp Business send: a guest (or a church invitation's person or group) and which message. */
+export type WaSend<G extends { id: string; name: string } = Guest> = { guest: G; kind: SendKind };

@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Copy, ImageDown, Loader2, MessageCircle, Pencil, Plus, Trash2, Undo2, X } from 'lucide-react';
+import { Check, Copy, ImageDown, Loader2, MessageCircle, Pencil, Plus, Send, Trash2, Undo2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,13 +12,22 @@ import { api, ApiError } from '@/lib/api';
 import { canShareImages, cardFileName, download, preloadCard, renderCard } from '@/lib/card-image';
 import { cfg } from '@/lib/config';
 import { ago, longDate, weekday } from '@/lib/format';
-import type { ChurchCard, ChurchCardArt, SiteSettings } from '@/lib/types';
+import type { ChurchCard, ChurchCardArt, SiteSettings, WaSend, WhatsAppStatus } from '@/lib/types';
 import { StaffHeader, StaffPage } from '../staff-shell';
 import { waNumber } from './model';
 import { SendCardDialog } from './send-card-dialog';
+import { WhatsAppSendDialog } from './whatsapp-send-dialog';
 import { SteadyText } from '@/components/ui/steady-text';
 
 type Data = { cards: ChurchCard[]; card: ChurchCardArt };
+
+// Sends from the couple's WhatsApp Business number go through these, with the church template.
+const churchUrls = {
+  preview: (s: WaSend<ChurchCard>) => `/api/admin/church-cards/${s.guest.id}/whatsapp`,
+  send: (s: WaSend<ChurchCard>) => `/api/admin/church-cards/${s.guest.id}/whatsapp`,
+};
+/** How far a WhatsApp Business send got, for the badge. */
+const WA_STATUS: Record<string, string> = { accepted: 'queued', sent: 'sent', delivered: 'delivered', read: 'read' };
 
 /** "Name, phone" on each line; the phone is optional. */
 function parseLines(text: string) {
@@ -46,8 +55,12 @@ export function ChurchCards() {
       ),
     [],
   );
+  // With the church template approved, invitations with a number go from the couple's WhatsApp Business number.
+  const [wa, setWa] = useState<WhatsAppStatus | null>(null);
+  const [business, setBusiness] = useState<WaSend<ChurchCard>[] | null>(null);
   useEffect(() => {
     load();
+    api<WhatsAppStatus>('/api/admin/whatsapp').then(setWa, () => {});
     api<SiteSettings>('/api/admin/site').then(
       (s) => setFont(s.nameFont),
       () => {},
@@ -95,6 +108,9 @@ export function ChurchCards() {
 
   const cards = useMemo(() => data?.cards ?? [], [data]);
   const sent = cards.filter((c) => c.sentAt).length;
+  const viaBusiness = (c: ChurchCard) => !!wa?.churchReady && !!waNumber(c.phone);
+  const unsent = cards.filter((c) => viaBusiness(c) && !c.sentAt);
+  const sendBusiness = (list: ChurchCard[]) => setBusiness(list.map((guest) => ({ guest, kind: 'church' as const })));
 
   return (
     <StaffPage>
@@ -108,8 +124,9 @@ export function ChurchCards() {
         signOutTo="/admin"
       />
       <p className="mt-4 mb-0 max-w-[60em] text-[0.88rem] text-ivory-dim">
-        Put a person’s or a group’s name on the church invitation card and send it from your WhatsApp. There’s no code, as the church wedding is open to all:
-        the message points to the website and its RSVP. These aren’t added to the invitation desk.
+        Put a person’s or a group’s name on the church invitation card and send it on WhatsApp. With a number, it goes from your WhatsApp Business number;
+        groups without one go from your phone, where you choose the chat. There’s no code, as the church wedding is open to all: the message points to the
+        website and its RSVP. These aren’t added to the invitation desk.
       </p>
 
       {!data ? (
@@ -122,6 +139,11 @@ export function ChurchCards() {
               <CardTitle className="ui-caps text-[0.72rem] text-ivory-dim">
                 Invitations ({cards.length}) · {sent} sent
               </CardTitle>
+              {unsent.length > 0 && (
+                <Button size="sm" onClick={() => sendBusiness(unsent)} className="mt-2 w-fit bg-[#1f7a4d] text-white hover:bg-[#25915b]">
+                  <Send /> Send the {unsent.length} not sent via WhatsApp
+                </Button>
+              )}
             </CardHeader>
             {cards.length === 0 ? (
               <p className="p-8 text-center text-ivory-dim">No one yet. Add a name, e.g. “Mr & Mrs Adeyemi” or “RCCG Youth Choir”.</p>
@@ -131,6 +153,8 @@ export function ChurchCards() {
                   <Row
                     key={c.id}
                     c={c}
+                    business={viaBusiness(c)}
+                    onBusiness={() => sendBusiness([c])}
                     onSend={() => sendOnWhatsApp(c)}
                     onCard={() => (canShareImages() ? setSharing({ card: c, after: false }) : saveCard(c))}
                     onCopy={() => copyMessage(c)}
@@ -154,6 +178,9 @@ export function ChurchCards() {
             ? { title: `${sharing.card.name}’s card`, description: 'Tap Share card, choose WhatsApp, then the chat. Or save the image.' }
             : {})}
         />
+      )}
+      {wa && art && (
+        <WhatsAppSendDialog sends={business} wa={wa} render={(c) => render(c)} urls={churchUrls} onProgress={load} onClose={() => setBusiness(null)} />
       )}
     </StaffPage>
   );
@@ -245,6 +272,8 @@ function AddCards({ onAdded }: { onAdded: () => void }) {
 
 function Row({
   c,
+  business,
+  onBusiness,
   onSend,
   onCard,
   onCopy,
@@ -253,6 +282,9 @@ function Row({
   onRemoved,
 }: {
   c: ChurchCard;
+  /** Can go from the couple's WhatsApp Business number (template approved, and a number to send to). */
+  business: boolean;
+  onBusiness: () => void;
   onSend: () => void;
   onCard: () => void;
   onCopy: () => void;
@@ -273,16 +305,39 @@ function Row({
             className={`ml-2 align-middle text-[0.65rem] font-normal ${c.sentAt ? 'border-gold/50 text-gold' : 'border-ivory-dim/40 text-ivory-dim'}`}
           >
             {c.sentAt ? `Sent ${ago(c.sentAt)}` : 'Not sent'}
+            {c.waStatus && c.waStatus !== 'failed' && ` · ${WA_STATUS[c.waStatus]}`}
           </Badge>
+          {c.waStatus === 'failed' && (
+            <Badge variant="outline" className="ml-1.5 border-bad/50 align-middle text-[0.65rem] font-normal text-bad" title={c.waError}>
+              WhatsApp failed
+            </Badge>
+          )}
         </b>
         <small className="block text-[0.78rem] text-ivory-dim">
           <SteadyText text={c.phone || 'No number: you choose the chat in WhatsApp'} />
         </small>
       </span>
       <span className="flex flex-wrap gap-1.5">
-        <Button size="sm" onClick={onSend} className="bg-[#1f7a4d] text-white hover:bg-[#25915b]">
-          <MessageCircle /> WhatsApp
-        </Button>
+        {business ? (
+          <>
+            <Button size="sm" onClick={onBusiness} className="bg-[#1f7a4d] text-white hover:bg-[#25915b]">
+              <Send /> Send · WhatsApp
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onSend}
+              className="border-gold/40 bg-transparent text-gold"
+              title="Send it from WhatsApp on this device instead"
+            >
+              <MessageCircle /> Message
+            </Button>
+          </>
+        ) : (
+          <Button size="sm" onClick={onSend} className="bg-[#1f7a4d] text-white hover:bg-[#25915b]">
+            <MessageCircle /> WhatsApp
+          </Button>
+        )}
         <Button size="sm" variant="outline" onClick={onCard} className="border-gold/40 bg-transparent text-gold">
           <ImageDown /> Card
         </Button>

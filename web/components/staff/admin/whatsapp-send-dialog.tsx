@@ -15,18 +15,27 @@ const PAUSE_MS = 600; // a steady pace keeps the number in good standing with Wh
  * and message, then one send per invitation (with the card when the template starts with an image). A guest
  * invited to both weddings gets two: the traditional invitation, then the church one.
  */
-export function WhatsAppSendDialog({
+type Who = { id: string; name: string };
+const guestUrls = {
+  preview: (s: WaSend<Who>) => `/api/admin/whatsapp?guest=${encodeURIComponent(s.guest.id)}&kind=${s.kind}`,
+  send: (s: WaSend<Who>) => `/api/admin/guests/${s.guest.id}/whatsapp?kind=${s.kind}`,
+};
+
+/** `urls` sends something other than guests' invitations, such as the Church invitations page's people and groups. */
+export function WhatsAppSendDialog<G extends Who = Guest>({
   sends,
   wa,
   render,
   onProgress,
   onClose,
+  urls = guestUrls,
 }: {
-  sends: WaSend[] | null;
+  sends: WaSend<G>[] | null;
   wa: WhatsAppStatus;
-  render: (g: Guest, kind: SendKind) => Promise<Blob>;
+  render: (g: G, kind: SendKind) => Promise<Blob>;
   onProgress: () => void;
   onClose: () => void;
+  urls?: { preview: (s: WaSend<G>) => string; send: (s: WaSend<G>) => string };
 }) {
   const tpl = (k: SendKind) => (k === 'church' ? wa.churchTemplate : k === 'reminder' ? wa.reminderTemplate : wa.template);
   const head = sends?.[0] ?? null;
@@ -45,7 +54,7 @@ export function WhatsAppSendDialog({
     let live = true;
     let url = '';
     Promise.all([
-      api<WhatsAppStatus>(`/api/admin/whatsapp?guest=${encodeURIComponent(first.id)}&kind=${kind}`).then(
+      api<{ preview?: string }>(urls.preview({ guest: first, kind })).then(
         (s) => s.preview || '',
         () => '',
       ),
@@ -60,7 +69,7 @@ export function WhatsAppSendDialog({
       live = false;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [first, kind, needsCard, render]);
+  }, [first, kind, needsCard, render, urls]);
 
   async function sendAll() {
     if (!sends) return;
@@ -72,7 +81,7 @@ export function WhatsAppSendDialog({
       if (stop.current) break;
       try {
         const card = tpl(k)?.needsImage ? await render(g, k) : undefined;
-        await api(`/api/admin/guests/${g.id}/whatsapp?kind=${k}`, { method: 'POST', raw: card, type: 'image/jpeg' });
+        await api(urls.send({ guest: g, kind: k }), { method: 'POST', raw: card, type: 'image/jpeg' });
         setSent((n) => n + 1);
       } catch (e) {
         const who = `${g.name}${k === 'trad' ? '' : ` (${k})`}`;
