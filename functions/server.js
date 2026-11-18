@@ -441,6 +441,21 @@ api.patch('/church-cards/:id', wrap(async (req, res) => {
   c ? res.json(await withMessage(c)) : res.status(404).json({ error: 'That invitation is gone' });
 }));
 api.delete('/church-cards/:id', wrap(async (req, res) => res.json({ ok: await churchCards.remove(req.params.id) })));
+// What the church template will say to one of them, for the preview before sending.
+api.get('/church-cards/:id/whatsapp', wrap(async (req, res) => {
+  const c = await churchCards.byId(req.params.id);
+  if (!c) return res.status(404).json({ error: 'That invitation is gone' });
+  res.json({ preview: await whatsapp.previewChurchCard(c).catch(() => '') });
+}));
+// Send one from the couple's WhatsApp Business number with the church template; the body may be their card (JPEG).
+api.post('/church-cards/:id/whatsapp', express.raw({ type: 'image/jpeg', limit: '4mb' }), wrap(async (req, res) => {
+  const c = await churchCards.byId(req.params.id);
+  if (!c) return res.status(404).json({ error: 'That invitation is gone' });
+  const r = await whatsapp.sendChurchCard(c, Buffer.isBuffer(req.body) && req.body.length ? req.body : null);
+  const saved = await churchCards.recordSend(c, r);
+  res.status(r.ok ? 200 : 400).json({ ...r, card: await withMessage(saved) });
+}));
+whatsapp.setOtherStatus((st) => churchCards.applyStatus(st, whatsapp.RANK));
 api.get('/qr/:id.svg', wrap(async (req, res) => {
   const g = await store.byId(req.params.id);
   if (!g) return res.sendStatus(404);
