@@ -20,6 +20,7 @@ import { ImportDialog } from './import-dialog';
 import { SendCardDialog } from './send-card-dialog';
 import { WhatsAppSendDialog } from './whatsapp-send-dialog';
 import { activityText, CHANNEL_LABEL, PILL, sendHref, whatsAppHref, type Stage, STAGES, stageOf, WA_TAG } from './model';
+import { SteadyText } from '@/components/ui/steady-text';
 
 type Data = { guests: Guest[]; activity: Activity[]; inviteUrl: string };
 
@@ -627,7 +628,7 @@ function GuestRow({
               </Badge>
             ))}
           </b>
-          <small className="text-[0.78rem] [overflow-wrap:anywhere] text-ivory-dim">{meta}</small>
+          <SteadyText text={meta} className="text-[0.78rem] [overflow-wrap:anywhere] text-ivory-dim" />
           {(
             [
               [g.waStatus, g.waError, ''],
@@ -766,7 +767,9 @@ function WhatsAppPanel({ wa }: { wa: WhatsAppStatus }) {
           {rows.map(([k, v]) => (
             <div key={k} className="contents">
               <dt className="text-ivory-dim">{k}</dt>
-              <dd className="m-0 [overflow-wrap:anywhere]">{v}</dd>
+              <dd className="m-0 [overflow-wrap:anywhere]">
+                <SteadyText text={v} />
+              </dd>
             </div>
           ))}
         </dl>

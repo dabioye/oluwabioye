@@ -365,6 +365,27 @@ test('with WhatsApp Business, the desk sends each guest their card and message f
   // Signed in once, through the page (the sign-in limit is 8 a minute and the suite signs in a lot).
   const kemi = await addGuest(page.request, { name: 'Kemi Adeyemi', phone: '0807 777 7777' });
   await addGuest(page.request, { name: 'Bayo Ojo', phone: '08088888888' }, false);
+  // Act like a click-to-call browser extension (3CX and others), which rewrites phone numbers on the page into
+  // its own links. It used to crash the desk when the send dialog closed.
+  await page.addInitScript(() => {
+    const wrap = (root: Node) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const hits: Text[] = [];
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        const t = n as Text;
+        if (/\+?\d[\d ]{9,}\d/.test(t.data) && t.parentElement?.localName !== 'tcxspan' && !t.parentElement?.closest('script,style')) hits.push(t);
+      }
+      for (const t of hits) {
+        const m = /\+?\d[\d ]{9,}\d/.exec(t.data)!;
+        const span = document.createElement('tcxspan');
+        span.textContent = m[0];
+        t.replaceWith(t.data.slice(0, m.index), span, t.data.slice(m.index + m[0].length));
+      }
+    };
+    new MutationObserver((records) => records.forEach((r) => r.addedNodes.forEach(wrap))).observe(document, { childList: true, subtree: true });
+  });
+  const crashes: string[] = [];
+  page.on('pageerror', (e) => crashes.push(e.message));
   await page.goto(`${PUBLIC}/admin`);
   await expect(page.getByText(/WhatsApp Business · ready/i)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('+234 807 269 2636 · Dabioye Solutions')).toBeVisible();
@@ -384,6 +405,8 @@ test('with WhatsApp Business, the desk sends each guest their card and message f
   await expect(dialog.getByText(/Done\. 1 sent of 1/)).toBeVisible({ timeout: 20_000 });
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(row.getByText('WhatsApp queued')).toBeVisible();
+  await expect(page.locator('tcxspan').first()).toBeAttached();
+  expect(crashes).toEqual([]);
 
   // "Message" still sends from WhatsApp on this device: the guest's chat opens with the message, then the card.
   await page.evaluate(() => {

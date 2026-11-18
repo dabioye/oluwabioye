@@ -11,6 +11,7 @@ import { ago, clock } from '@/lib/format';
 import type { InboxConversation, InboxMessage, InboxThread } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { StaffHeader, StaffPage } from '../staff-shell';
+import { SteadyText } from '@/components/ui/steady-text';
 
 const threadFromUrl = () => (typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('thread'));
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Africa/Lagos' });
@@ -101,7 +102,11 @@ export function Inbox() {
                         </small>
                         {t.unread > 0 && <Badge className="h-5 min-w-5 justify-center bg-gold px-1.5 text-navy">{t.unread}</Badge>}
                       </span>
-                      {!t.guestId && <small className="text-[0.7rem] text-warn">Not on the guest list · +{t.phone}</small>}
+                      {!t.guestId && (
+                        <small className="text-[0.7rem] text-warn">
+                          Not on the guest list · <SteadyText text={`+${t.phone}`} />
+                        </small>
+                      )}
                     </button>
                   </li>
                 ))}
@@ -175,7 +180,7 @@ function Conversation({ thread, onBack, onChanged }: { thread: string; onBack: (
           <h1 className="m-0 truncate font-display text-lg font-medium text-gold">{c?.name ?? '…'}</h1>
           {c && (
             <small className="text-[0.78rem] text-ivory-dim">
-              +{c.phone}
+              <SteadyText text={`+${c.phone}`} />
               {c.guest && (
                 <>
                   {' · '}code {c.guest.code} · {c.guest.rsvp === 'yes' ? 'attending' : c.guest.rsvp === 'no' ? 'not attending' : 'no RSVP yet'}

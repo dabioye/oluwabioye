@@ -16,6 +16,7 @@ import type { ChurchCard, ChurchCardArt, SiteSettings } from '@/lib/types';
 import { StaffHeader, StaffPage } from '../staff-shell';
 import { waNumber } from './model';
 import { SendCardDialog } from './send-card-dialog';
+import { SteadyText } from '@/components/ui/steady-text';
 
 type Data = { cards: ChurchCard[]; card: ChurchCardArt };
 
@@ -269,7 +270,9 @@ function Row({
             {c.sentAt ? `Sent ${ago(c.sentAt)}` : 'Not sent'}
           </Badge>
         </b>
-        <small className="block text-[0.78rem] text-ivory-dim">{c.phone || 'No number: you choose the chat in WhatsApp'}</small>
+        <small className="block text-[0.78rem] text-ivory-dim">
+          <SteadyText text={c.phone || 'No number: you choose the chat in WhatsApp'} />
+        </small>
       </span>
       <span className="flex flex-wrap gap-1.5">
         <Button size="sm" onClick={onSend} className="bg-[#1f7a4d] text-white hover:bg-[#25915b]">
