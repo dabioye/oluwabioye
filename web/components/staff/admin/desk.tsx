@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, Download, ImageDown, Link2, Mail, MessageCircle, Plus, Send, Upload, X } from 'lucide-react';
+import { CalendarClock, Copy, Download, ImageDown, Link2, Mail, MessageCircle, Plus, Send, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { api, ApiError } from '@/lib/api';
 import { cfg, type EventKey } from '@/lib/config';
 import { ago, longDate, weekday } from '@/lib/format';
 import { canShareImages, cardFileName, churchCardFileName, download, preloadCard, renderCard, type CardFile } from '@/lib/card-image';
-import type { Activity, EmailStatus, Guest, InviteKind, Side, SiteSettings, WaSend, WhatsAppStatus } from '@/lib/types';
+import type { Activity, EmailStatus, Guest, InviteKind, SendKind, Side, SiteSettings, WaSend, WhatsAppStatus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { StaffHeader, StaffPage } from '../staff-shell';
 import { GuestDialog } from './guest-dialog';
@@ -30,7 +30,7 @@ const getsChurchCard = (g: Guest) => g.events.includes('church');
 const church = cfg.churchCard;
 /** The invitations a guest should get: one per event they are invited to, traditional first. */
 const wants = (g: Guest): InviteKind[] => (['trad', 'church'] as const).filter((k) => g.events.includes(k));
-const sentId = (g: Guest, k: InviteKind) => (k === 'church' ? g.waChurchMessageId : g.waMessageId);
+const sentId = (g: Guest, k: SendKind) => (k === 'church' ? g.waChurchMessageId : k === 'reminder' ? g.waReminderMessageId : g.waMessageId);
 const waState = (g: Guest, k: InviteKind) => (k === 'church' ? g.waChurchStatus : g.waStatus);
 const reachable = (g: Guest) => g.channel === 'whatsapp' && !!g.phone && g.rsvp !== 'no';
 const EVENT_CHOICES: { label: string; events: EventKey[] }[] = [
@@ -105,7 +105,7 @@ export function Desk() {
   const hasCards = (g: Guest) => (!!cardSrc && getsCard(g)) || getsChurchCard(g);
   /** One of the guest's cards, for a WhatsApp Business send. */
   const renderFor = useCallback(
-    (g: Guest, kind: InviteKind) =>
+    (g: Guest, kind: SendKind) =>
       kind === 'church' ? renderCard({ src: church.art, name: g.name, nameSlot: church.nameSlot, ink: church.ink, font: nameFont }) : cardFor(g),
     [cardFor, nameFont],
   );
@@ -272,6 +272,27 @@ export function Desk() {
     ].filter(Boolean);
     if (notes.length) toast.info(notes.join(' '), { duration: 12_000 });
     setWaSending(sends);
+  }
+
+  /** The countdown reminder, from the WhatsApp Business number, to each selected guest who can get it. */
+  function remindPicked() {
+    if (!wa?.reminderReady) {
+      toast.error(
+        wa?.reminderTemplate?.error && /No template called/.test(wa.reminderTemplate.error)
+          ? `The countdown template (${wa.reminderTemplate.name}) isn’t in WhatsApp Manager yet.`
+          : 'The countdown template isn’t approved yet, so reminders can’t be sent.',
+      );
+      return;
+    }
+    const to = chosen.filter(reachable);
+    const left = chosen.filter((g) => !reachable(g));
+    if (!to.length)
+      return toast.error('None of these can get a WhatsApp reminder: they need a WhatsApp number, WhatsApp as how to send, and not to have declined.');
+    if (left.length)
+      toast.info(`${left.length} skipped (no WhatsApp number, not sent by WhatsApp, or declined): ${left.map((g) => g.name).join(', ')}.`, {
+        duration: 12_000,
+      });
+    setWaSending(to.map((guest) => ({ guest, kind: 'reminder' })));
   }
   const total = guests.length || 1;
   const sent = guests.filter((g) => g.sentAt || g.cardDelivered).length;
@@ -502,7 +523,16 @@ export function Desk() {
                       {c.label}
                     </Button>
                   ))}
-                  <Button size="sm" disabled={busy} className="bg-[#1f7a4d] text-white hover:bg-[#25915b] sm:ml-auto" onClick={resendPicked}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    className="border-[#1f7a4d] bg-transparent text-[#5fd39a] sm:ml-auto"
+                    onClick={remindPicked}
+                  >
+                    <CalendarClock /> Send countdown reminder
+                  </Button>
+                  <Button size="sm" disabled={busy} className="bg-[#1f7a4d] text-white hover:bg-[#25915b]" onClick={resendPicked}>
                     <Send /> Resend invitations
                   </Button>
                 </div>
@@ -602,6 +632,7 @@ function GuestRow({
             [
               [g.waStatus, g.waError, ''],
               [g.waChurchStatus, g.waChurchError, g.waStatus ? ' (church)' : ''],
+              [g.waReminderStatus, g.waReminderError, ' (reminder)'],
             ] as const
           ).map(([s, err, which]) =>
             s ? (
@@ -694,6 +725,7 @@ function GuestRow({
 function WhatsAppPanel({ wa }: { wa: WhatsAppStatus }) {
   const t = wa.template;
   const c = wa.churchTemplate;
+  const r = wa.reminderTemplate;
   const rows: [string, string][] = [
     ['From', [wa.phone?.display_phone_number, wa.phone?.verified_name].filter(Boolean).join(' · ') || '—'],
     ['Template', t ? `${t.name} · ${t.language} · ${t.fallback ? 'not read from Meta' : `${t.category.toLowerCase()}, ${t.status.toLowerCase()}`}` : '—'],
@@ -707,6 +739,16 @@ function WhatsAppPanel({ wa }: { wa: WhatsAppStatus }) {
             ? `${c.name} isn’t in WhatsApp Manager yet, so church invitations go by hand`
             : `couldn’t read ${c.name}: ${c.error}`
           : `${c.name} · ${c.language} · ${c.category.toLowerCase()}, ${c.status.toLowerCase()}${wa.churchReady ? '' : ' (church invitations go by hand until it’s approved)'}`,
+    ],
+    [
+      'Reminder template',
+      !r
+        ? '—'
+        : r.error
+          ? /No template called/.test(r.error)
+            ? `${r.name} isn’t in WhatsApp Manager yet`
+            : `couldn’t read ${r.name}: ${r.error}`
+          : `${r.name} · ${r.language} · ${r.category.toLowerCase()}, ${r.status.toLowerCase()}`,
     ],
     ['Number quality', wa.phone?.quality_rating ? wa.phone.quality_rating.toLowerCase() : '—'],
     ['Access token', wa.token?.error ? 'couldn’t check' : wa.token?.expiresAt ? `expires ${wa.token.expiresAt.slice(0, 10)}` : 'never expires'],

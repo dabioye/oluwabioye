@@ -157,6 +157,24 @@ The site reads each template from Meta (language, image header, variables, butto
 
 It is Marketing, not Utility: Meta treats an invitation nobody asked for as marketing, and moves a template submitted as Utility to Marketing if its wording is promotional.
 
+**`oluwabioye_countdown`** (Utility, English), the countdown reminder. Tick guests on the desk and use **Send countdown reminder**. The days left are counted to the ceremony exactly like the website's countdown, and the line about their day follows the events they're invited to (`reminderDetails` in `functions/src/config.js`).
+- **Type of variable:** Name.
+- **Body:**
+  ```
+  Dear {{guest_name}},
+
+  Just {{countdown}} to go until our wedding on Thursday, 17 December 2026!
+
+  {{event_details}}
+
+  We can't wait to celebrate with you.
+  Sarah & Damilare
+  ```
+  Samples: `guest_name` = `Tope Omidiji`, `countdown` = `21 days`, `event_details` = `The Wedding Ceremony is at 10:00 AM at RCCG Garden of Peace, Region 52 Headquarters, 78/80 Falolu Road, Surulere.`
+- **Button:** Visit website · text `View invitation` · **Dynamic** URL `https://sarahanddamilare.dabioye.com/{{1}}` (sample `https://sarahanddamilare.dabioye.com/i/B27CVE`). Guests of the traditional wedding go to their own invitation and access card; church-only guests go to the website.
+
+Meta may move it to Marketing; it sends the same either way.
+
 **`guest_reply_alert`** (Utility, English), the alert sent to your own phone when a guest replies:
 - **Body:**
   ```
@@ -254,7 +272,7 @@ Set it up like this:
 2. With WhatsApp Business connected (above), tap **Send all pending via WhatsApp**, or **Send · WhatsApp** on a guest. Without it, filter **Not sent** and tap **Send next on WhatsApp** (or **Send · WhatsApp** on a guest). Guests invited to the traditional wedding get their **personalised card** (their name and access code on the card) as well as the message. WhatsApp opens the guest's chat with the message ready, so send it. On a phone, come back to the desk and tap **Share card**, pick WhatsApp, then the guest (top of your recent chats). On a laptop the card is downloaded instead, so attach it in the chat. WhatsApp can't take an image and a caption from a link, and drops the text when an image is shared, so they go as two messages. **Card** downloads a guest's card on its own. The message reminds guests the link is personal. Guests who lose the link can type their code (the last 6 characters of the link) on `oluwabioye.dabioye.com`.
 3. For printed cards, set *Send via → Printed card* and tick **Card given**.
 4. Chase **Sent, not opened** and **Opened, no reply** before the RSVP date.
-5. To change several guests at once, tick them (or **Select all shown** after a search or filter). The bar that appears sets them all to **Church only**, **Traditional only** or **Both**, and offers to send any invitation they're now owed. **Resend invitations** sends each ticked guest every invitation WhatsApp Business can send them again.
+5. To change several guests at once, tick them (or **Select all shown** after a search or filter). The bar that appears sets them all to **Church only**, **Traditional only** or **Both**, and offers to send any invitation they're now owed. **Resend invitations** sends each ticked guest every invitation WhatsApp Business can send them again. **Send countdown reminder** sends them the countdown reminder.
 
 ## On the day
 

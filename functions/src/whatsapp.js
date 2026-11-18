@@ -23,6 +23,7 @@ function settings() {
     phoneId: env('WHATSAPP_PHONE_ID') || cfg.whatsapp.phoneNumberId,
     template: env('WHATSAPP_TEMPLATE') || cfg.whatsapp.template,
     churchTemplate: env('WHATSAPP_CHURCH_TEMPLATE') || cfg.whatsapp.churchTemplate,
+    reminderTemplate: env('WHATSAPP_REMINDER_TEMPLATE') || cfg.whatsapp.reminderTemplate,
     lang: env('WHATSAPP_LANG') || 'en',
     headerImage: env('WHATSAPP_HEADER_IMAGE'), // a fixed image for an image header when no card is sent
   };
@@ -33,8 +34,10 @@ const configured = () => { const s = settings(); return !!(s.token && s.phoneId)
 const KINDS = {
   trad: { template: () => settings().template, id: 'waMessageId', status: 'waStatus', error: 'waError', at: 'waSentAt', label: 'WhatsApp API' },
   church: { template: () => settings().churchTemplate, id: 'waChurchMessageId', status: 'waChurchStatus', error: 'waChurchError', at: 'waChurchSentAt', label: 'WhatsApp API · church' },
+  // The countdown reminder: not an invitation, so it doesn't mark the guest as sent.
+  reminder: { template: () => settings().reminderTemplate, id: 'waReminderMessageId', status: 'waReminderStatus', error: 'waReminderError', at: 'waReminderSentAt', reminder: true },
 };
-const kindOf = (k) => (k === 'church' ? 'church' : 'trad');
+const kindOf = (k) => (KINDS[k] ? k : 'trad');
 
 // 0803 123 4567 -> 2348031234567 ; +44 7700 900123 -> 447700900123
 function toWaNumber(phone) {
@@ -94,6 +97,11 @@ async function template({ fresh = false, name = settings().template } = {}) {
 // The README's layout, for when the template can't be read (e.g. a token without template access).
 function fallbackTemplate(kind = 'trad') {
   const s = settings();
+  if (kind === 'reminder')
+    return {
+      name: s.reminderTemplate, language: s.lang, status: 'UNKNOWN', category: '', fallback: true, parameter_format: 'NAMED',
+      components: [{ type: 'BODY', text: 'Dear {{guest_name}}, just {{countdown}} to go … {{event_details}} …' }],
+    };
   if (kind === 'church')
     return {
       name: s.churchTemplate, language: s.lang, status: 'UNKNOWN', category: '', fallback: true,
@@ -120,6 +128,8 @@ const MONTH = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i;
 function meaning(key, example, index) {
   const k = String(key).toLowerCase();
   if (!/^\d+$/.test(k)) {
+    if (/count|days|left/.test(k)) return 'countdown';
+    if (/detail|event|plan/.test(k)) return 'details';
     if (/link|url/.test(k)) return 'link';
     if (/code/.test(k)) return 'code';
     if (/first/.test(k)) return 'first';
@@ -246,7 +256,9 @@ async function sendInvite(guest, card, kind = 'trad') {
       } else if (s.headerImage) header = { link: s.headerImage };
       else throw new WhatsAppError('This template starts with an image, so the guest’s card is needed');
     }
-    const { components } = fill(t, await valuesFor(guest, kind), header);
+    const values = await valuesFor(guest, kind);
+    if (K.reminder && !values.countdown) throw new WhatsAppError('The wedding day has passed, so there is nothing to count down to');
+    const { components } = fill(t, values, header);
     const body = await graph(`/${s.phoneId}/messages`, {
       method: 'POST',
       body: { messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'template', template: { name: t.name, language: { code: t.language }, components } },
@@ -254,12 +266,13 @@ async function sendInvite(guest, card, kind = 'trad') {
     const id = body.messages?.[0]?.id;
     if (!id) throw new WhatsAppError('WhatsApp didn’t return a message id');
     const at = new Date().toISOString();
-    await store.setWa(guest.id, { [K.id]: id, [K.status]: 'accepted', [K.error]: '', [K.at]: at, sentAt: guest.sentAt || at }, 'sent', K.label);
+    if (K.reminder) await store.setWa(guest.id, { [K.id]: id, [K.status]: 'accepted', [K.error]: '', [K.at]: at }, 'reminder', values.countdown);
+    else await store.setWa(guest.id, { [K.id]: id, [K.status]: 'accepted', [K.error]: '', [K.at]: at, sentAt: guest.sentAt || at }, 'sent', K.label);
     return { ok: true, id, kind };
   } catch (e) {
     if (!(e instanceof WhatsAppError)) throw e;
     await store.setWa(guest.id, { [K.status]: 'failed', [K.error]: e.message.slice(0, 300) }, 'wafailed', e.message.slice(0, 120));
-    return { ok: false, error: `${guest.name}${kind === 'church' ? ' (church)' : ''}: ${e.message}` };
+    return { ok: false, error: `${guest.name}${kind === 'trad' ? '' : ` (${kind})`}: ${e.message}` };
   }
 }
 
@@ -289,11 +302,12 @@ const eligible = (g) => pending(g).length > 0;
 async function status() {
   if (!configured()) return { configured: false, ready: false };
   const out = { configured: true, ready: false, problems: [] };
-  const [info, phone, t, c] = await Promise.all([
+  const [info, phone, t, c, rm] = await Promise.all([
     tokenInfo().catch((e) => ({ error: e.message })),
     graph(`/${settings().phoneId}?fields=display_phone_number,verified_name,quality_rating`).catch((e) => ({ error: e.message })),
     templateFor('trad', { fresh: true }).catch((e) => ({ error: e.message })),
     templateFor('church', { fresh: true }).catch((e) => ({ error: e.message })),
+    templateFor('reminder', { fresh: true }).catch((e) => ({ error: e.message })),
   ]);
   out.token = info;
   out.phone = phone;
@@ -310,6 +324,8 @@ async function status() {
   // The church invitation is separate: until its template is approved, church invitations go from the desk by hand.
   out.churchTemplate = c.error ? { ...describe(fallbackTemplate('church')), error: c.error } : describe(c);
   out.churchReady = !phone.error && !c.error && c.status === 'APPROVED';
+  out.reminderTemplate = rm.error ? { ...describe(fallbackTemplate('reminder')), error: rm.error } : describe(rm);
+  out.reminderReady = !phone.error && !rm.error && rm.status === 'APPROVED';
   return out;
 }
 
@@ -340,13 +356,15 @@ async function handleWebhook(body) {
     if (m) continue;
     const g = await store.byWaId(st.id);
     if (!g) continue;
-    const K = KINDS[g.waChurchMessageId === st.id ? 'church' : 'trad'];
+    const K = KINDS[g.waChurchMessageId === st.id ? 'church' : g.waReminderMessageId === st.id ? 'reminder' : 'trad'];
     // Statuses can arrive out of order; never move backwards (except to failed).
     if (st.status !== 'failed' && (RANK[st.status] ?? -1) <= (RANK[g[K.status]] ?? -1)) continue;
     const p = { [K.status]: st.status };
     if (st.status === 'failed') p[K.error] = ((st.errors || [])[0] || {}).title || 'Delivery failed';
     if (st.status === 'read') p.waReadAt = new Date(Number(st.timestamp) * 1000 || Date.now()).toISOString();
-    await store.setWa(g.id, p, st.status === 'read' ? 'waread' : st.status === 'failed' ? 'wafailed' : null, st.status === 'failed' ? p[K.error] : st.status);
+    // Only the invitations' reads and failures go in the activity list, not the reminders'.
+    const log = K.reminder ? null : st.status === 'read' ? 'waread' : st.status === 'failed' ? 'wafailed' : null;
+    await store.setWa(g.id, p, log, st.status === 'failed' ? p[K.error] : st.status);
   }
   let replies = 0;
   for (const v of values) {

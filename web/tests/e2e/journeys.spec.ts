@@ -472,6 +472,18 @@ test('several guests at once: tick them, change their events, then send or resen
     );
   expect(toCode(ada.code)).toHaveLength(2);
   expect(toCode(bisi.code)).toHaveLength(2);
+
+  // The countdown reminder to the same guests: the days left, as on the website, and their own day
+  await bar.getByRole('button', { name: 'Send countdown reminder' }).click();
+  const remind = page.getByRole('dialog', { name: 'Send the countdown reminder to 2 guests' });
+  await expect(remind.getByText(/^Dear Bulk Ada,\s+Just \d+ days to go until our wedding!\s+The Making of Oluwabioye starts at 2:00 PM/)).toBeVisible();
+  await remind.getByRole('button', { name: 'Send all 2' }).click();
+  await expect(remind.getByText(/Done\. 2 sent of 2/)).toBeVisible({ timeout: 30_000 });
+  await remind.getByRole('button', { name: 'Done', exact: true }).click();
+  const after = await (await request.get(`${META}/__sent`)).json();
+  const reminders = after.sent.filter((m: { template: { name: string } }) => m.template.name === 'oluwabioye_countdown');
+  expect(reminders.map((m: { to: string }) => m.to).sort()).toEqual(['2348061110001', '2348061110002']);
+  await expect(page.getByText('WhatsApp queued (reminder)').first()).toBeVisible();
   await bar.getByRole('button', { name: 'Clear' }).click();
   await expect(bar).toHaveCount(0);
 });

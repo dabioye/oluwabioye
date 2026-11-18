@@ -220,7 +220,7 @@ const store = require('../src/store');
     const call = { path: u.pathname, auth: opts.headers.Authorization, body: opts.body };
     meta.calls.push(call);
     if (u.pathname === '/debug_token') return reply(200, { data: { is_valid: true, expires_at: 0, granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['WABA1'] }] } });
-    if (u.pathname === '/WABA1/message_templates') return reply(200, { data: [meta.template, meta.alert, meta.church].filter(Boolean).filter((t) => t.name === u.searchParams.get('name')) });
+    if (u.pathname === '/WABA1/message_templates') return reply(200, { data: [meta.template, meta.alert, meta.church, meta.reminder].filter(Boolean).filter((t) => t.name === u.searchParams.get('name')) });
     if (u.pathname === '/PHONE1') return reply(200, { display_phone_number: '+234 807 269 2636', verified_name: 'Dabioye Solutions', quality_rating: 'GREEN' });
     if (u.pathname === '/PHONE1/media') return reply(200, { id: 'MEDIA1' });
     if (u.pathname === '/PHONE1/messages') {
@@ -445,6 +445,41 @@ const store = require('../src/store');
   assert.deepEqual((await store.byId(waiting.id)).events, ['church']);
   assert.equal((await req('/api/admin/guests/bulk', json('POST', { ids: [both.id], events: [] }, admin))).status, 400);
   assert.equal((await req('/api/admin/guests/bulk', json('POST', { ids: [both.id], events: ['trad'] }, gate))).status, 401);
+
+  const cfg = require('../src/config');
+  // The countdown reminder: days to the ceremony like the website's countdown, the guest's own day, and a link
+  meta.reminder = {
+    name: 'oluwabioye_countdown', language: 'en', status: 'APPROVED', category: 'UTILITY', parameter_format: 'NAMED',
+    components: [
+      { type: 'BODY', text: 'Dear {{guest_name}},\n\nJust {{countdown}} to go!\n\n{{event_details}}\n\nSee you soon.',
+        example: { body_text_named_params: [{ param_name: 'guest_name', example: 'Tope Omidiji' }, { param_name: 'countdown', example: '21 days' }, { param_name: 'event_details', example: 'The Wedding Ceremony is at 10:00 AM.' }] } },
+      { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'View invitation', url: 'http://public.test/{{1}}', example: ['http://public.test/i/B27CVE'] }] },
+    ],
+  };
+  wa._reset();
+  st2 = await (await req(`/api/admin/whatsapp?guest=${waiting.id}&kind=reminder`, { headers: { cookie: admin } })).json();
+  assert.equal(st2.reminderReady, true);
+  const days = Math.floor((new Date(cfg.events.church.startsAt) - Date.now()) / 86400e3);
+  assert.match(st2.preview, new RegExp(`^Dear Pending With Card,\n\nJust ${days} days to go!\n\nThe Wedding Ceremony is at 10:00 AM at RCCG`), st2.preview);
+  const tradOnly = await (await req('/api/admin/guests', json('POST', { name: 'Trad Only', phone: '08030000015', events: ['trad'] }, admin))).json();
+  const tradBefore = (await store.byId(tradOnly.id)).waMessageId;
+  r = await req(`/api/admin/guests/${tradOnly.id}/whatsapp?kind=reminder`, { method: 'POST', headers: { cookie: admin } });
+  assert.equal(r.status, 200, JSON.stringify(await r.clone().json()));
+  const rem = sendsTo('2348030000015').at(-1);
+  assert.equal(rem.template.name, 'oluwabioye_countdown');
+  assert.deepEqual(rem.template.components[0].parameters.map((p) => [p.parameter_name, p.text]), [
+    ['guest_name', 'Trad Only'], ['countdown', `${days} days`], ['event_details', cfg.reminderDetails.trad],
+  ]);
+  assert.deepEqual(rem.template.components[1].parameters, [{ type: 'text', text: `i/${tradOnly.code}` }], 'links to their invitation through the website');
+  const remGuest = await store.byId(tradOnly.id);
+  assert(remGuest.waReminderMessageId && remGuest.waReminderStatus === 'accepted');
+  assert.equal(remGuest.waMessageId, tradBefore, 'a reminder is not an invitation');
+  r = await req(`/api/admin/guests/${waiting.id}/whatsapp?kind=reminder`, { method: 'POST', headers: { cookie: admin } });
+  assert.equal(sendsTo('2348030000013').at(-1).template.components[1].parameters[0].text, '?from=reminder', 'church-only guests go to the website');
+  const remHook = JSON.stringify({ entry: [{ changes: [{ value: { statuses: [{ id: remGuest.waReminderMessageId, status: 'read', timestamp: '1790000000' }] } }] }] });
+  await req('/api/whatsapp/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': 'sha256=' + require('crypto').createHmac('sha256', 'appsecret').update(remHook).digest('hex') }, body: remHook });
+  assert.equal((await store.byId(tradOnly.id)).waReminderStatus, 'read');
+  assert.notEqual((await store.byId(tradOnly.id)).waStatus, 'read');
 
   // ---------- Email invitations (a stand-in mail server) ----------
   const mail = require('../src/email');

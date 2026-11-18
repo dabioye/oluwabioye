@@ -113,7 +113,7 @@ function jsonBackend() {
     async markSent(g, via) { return patch(g.id, { sentAt: g.sentAt || now() }, 'sent', via || g.channel); },
     async unmarkSent(g) { return patch(g.id, { sentAt: null }); },
     async setWa(id, p, logType, extra) { return patch(id, p, logType, extra); },
-    async byWaId(wid) { const g = state.guests.find((x) => x.waMessageId === wid || x.waChurchMessageId === wid); return g ? { ...g } : null; },
+    async byWaId(wid) { const g = state.guests.find((x) => [x.waMessageId, x.waChurchMessageId, x.waReminderMessageId].includes(wid)); return g ? { ...g } : null; },
     async markOpened(g) {
       const cur = find(g.id);
       return patch(g.id, { openCount: (cur.openCount || 0) + 1, openedAt: cur.openedAt || now() }, cur.openedAt ? null : 'opened');
@@ -279,7 +279,7 @@ function firestoreBackend() {
     async unmarkSent(g) { return patch(g.id, { sentAt: null }); },
     async setWa(id, p, logType, extra) { return patch(id, p, logType, extra); },
     async byWaId(wid) {
-      for (const field of ['waMessageId', 'waChurchMessageId']) {
+      for (const field of ['waMessageId', 'waChurchMessageId', 'waReminderMessageId']) {
         const s = await guests.where(field, '==', String(wid)).limit(1).get();
         if (!s.empty) return s.docs[0].data();
       }

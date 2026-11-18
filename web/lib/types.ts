@@ -93,6 +93,11 @@ export type Guest = {
   waChurchMessageId?: string;
   waChurchStatus?: 'accepted' | 'sent' | 'delivered' | 'read' | 'failed';
   waChurchError?: string;
+  /** The countdown reminder (not an invitation), tracked the same way. */
+  waReminderMessageId?: string;
+  waReminderStatus?: 'accepted' | 'sent' | 'delivered' | 'read' | 'failed';
+  waReminderError?: string;
+  waReminderSentAt?: string;
   waSentAt?: string;
   waReadAt?: string;
   /** Email invitation: when it was sent, or why the mail server refused it. */
@@ -112,6 +117,9 @@ export type WhatsAppStatus = {
   /** The church-wedding template; `error` when it can't be read (e.g. not created yet). */
   churchTemplate?: WhatsAppTemplate & { error?: string };
   churchReady?: boolean;
+  /** The countdown reminder template. */
+  reminderTemplate?: WhatsAppTemplate & { error?: string };
+  reminderReady?: boolean;
   /** The message as the guest asked about (?guest=id) will read it. */
   preview?: string;
 };
@@ -233,5 +241,7 @@ export type PublicWish = { id: string; name: string; message: string; at: string
 export type Wish = { id: string; name: string; message: string; status: 'pending' | 'approved' | 'hidden'; createdAt: string; reviewedAt: string | null };
 /** The two invitations: the private traditional one (with the access card) and the church one (with the church card). */
 export type InviteKind = 'trad' | 'church';
-/** One WhatsApp Business send: a guest and which of their invitations. */
-export type WaSend = { guest: Guest; kind: InviteKind };
+/** What a WhatsApp Business send carries: one of the invitations, or the countdown reminder. */
+export type SendKind = InviteKind | 'reminder';
+/** One WhatsApp Business send: a guest and which message. */
+export type WaSend = { guest: Guest; kind: SendKind };

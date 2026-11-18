@@ -4,7 +4,7 @@ import { Loader2, Send, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { api, ApiError } from '@/lib/api';
-import type { Guest, InviteKind, WaSend, WhatsAppStatus } from '@/lib/types';
+import type { Guest, SendKind, WaSend, WhatsAppStatus } from '@/lib/types';
 
 type Phase = 'confirm' | 'sending' | 'done';
 const PAUSE_MS = 600; // a steady pace keeps the number in good standing with WhatsApp
@@ -23,11 +23,11 @@ export function WhatsAppSendDialog({
 }: {
   sends: WaSend[] | null;
   wa: WhatsAppStatus;
-  render: (g: Guest, kind: InviteKind) => Promise<Blob>;
+  render: (g: Guest, kind: SendKind) => Promise<Blob>;
   onProgress: () => void;
   onClose: () => void;
 }) {
-  const tpl = (k: InviteKind) => (k === 'church' ? wa.churchTemplate : wa.template);
+  const tpl = (k: SendKind) => (k === 'church' ? wa.churchTemplate : k === 'reminder' ? wa.reminderTemplate : wa.template);
   const head = sends?.[0] ?? null;
   const first = head?.guest ?? null;
   const kind = head?.kind ?? 'trad';
@@ -74,7 +74,7 @@ export function WhatsAppSendDialog({
         await api(`/api/admin/guests/${g.id}/whatsapp?kind=${k}`, { method: 'POST', raw: card, type: 'image/jpeg' });
         setSent((n) => n + 1);
       } catch (e) {
-        const who = `${g.name}${k === 'church' ? ' (church)' : ''}`;
+        const who = `${g.name}${k === 'trad' ? '' : ` (${k})`}`;
         setFailed((f) => [...f, e instanceof ApiError ? e.message : `${who}: ${e instanceof Error ? e.message : 'couldn’t send'}`]);
       }
       if ((i + 1) % 10 === 0) onProgress();
@@ -96,8 +96,12 @@ export function WhatsAppSendDialog({
   const many = n > 1;
   const kinds = new Set(sends?.map((s) => s.kind));
   const from = wa.phone?.display_phone_number || 'your WhatsApp Business number';
-  const title =
-    people > 1
+  const reminders = kinds.size === 1 && kinds.has('reminder');
+  const title = reminders
+    ? people > 1
+      ? `Send the countdown reminder to ${people} guests`
+      : `Send ${first?.name} the countdown reminder`
+    : people > 1
       ? `Send ${n} invitations to ${people} guests on WhatsApp`
       : many
         ? `Send ${first?.name}’s two invitations on WhatsApp`
@@ -109,7 +113,7 @@ export function WhatsAppSendDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
             From {from}, with the {[...kinds].map((k) => `“${tpl(k)?.name}”`).join(' and ')} {kinds.size > 1 ? 'templates' : 'template'}.{' '}
-            {kinds.size > 1
+            {kinds.has('trad') && kinds.has('church')
               ? `Guests invited to both weddings get both, traditional first. Here is ${first?.name}’s ${kind === 'church' ? 'church' : 'traditional'} one.`
               : many
                 ? `Here is ${first?.name}’s; each guest gets their own.`
