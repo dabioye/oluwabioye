@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, ImageDown, Loader2, MessageCircle, Plus, Trash2, Undo2 } from 'lucide-react';
+import { Check, Copy, ImageDown, Loader2, MessageCircle, Pencil, Plus, Trash2, Undo2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import type { ChurchCard, ChurchCardArt, SiteSettings } from '@/lib/types';
 import { StaffHeader, StaffPage } from '../staff-shell';
 import { waNumber } from './model';
 import { SendCardDialog } from './send-card-dialog';
+import { SteadyText } from '@/components/ui/steady-text';
 
 type Data = { cards: ChurchCard[]; card: ChurchCardArt };
 
@@ -134,6 +135,7 @@ export function ChurchCards() {
                     onCard={() => (canShareImages() ? setSharing({ card: c, after: false }) : saveCard(c))}
                     onCopy={() => copyMessage(c)}
                     onUnsend={() => markSent(c, false)}
+                    onChanged={load}
                     onRemoved={load}
                   />
                 ))}
@@ -247,6 +249,7 @@ function Row({
   onCard,
   onCopy,
   onUnsend,
+  onChanged,
   onRemoved,
 }: {
   c: ChurchCard;
@@ -254,9 +257,12 @@ function Row({
   onCard: () => void;
   onCopy: () => void;
   onUnsend: () => void;
+  onChanged: () => void;
   onRemoved: () => void;
 }) {
   const [armed, setArmed] = useState(false);
+  const [editing, setEditing] = useState(false);
+  if (editing) return <EditRow c={c} onDone={(changed) => (setEditing(false), changed && onChanged())} />;
   return (
     <li className="grid gap-2 border-b border-hairline-soft px-4 py-3 last:border-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <span className="min-w-0">
@@ -269,7 +275,9 @@ function Row({
             {c.sentAt ? `Sent ${ago(c.sentAt)}` : 'Not sent'}
           </Badge>
         </b>
-        <small className="block text-[0.78rem] text-ivory-dim">{c.phone || 'No number: you choose the chat in WhatsApp'}</small>
+        <small className="block text-[0.78rem] text-ivory-dim">
+          <SteadyText text={c.phone || 'No number: you choose the chat in WhatsApp'} />
+        </small>
       </span>
       <span className="flex flex-wrap gap-1.5">
         <Button size="sm" onClick={onSend} className="bg-[#1f7a4d] text-white hover:bg-[#25915b]">
@@ -277,6 +285,9 @@ function Row({
         </Button>
         <Button size="sm" variant="outline" onClick={onCard} className="border-gold/40 bg-transparent text-gold">
           <ImageDown /> Card
+        </Button>
+        <Button size="icon" variant="ghost" onClick={() => setEditing(true)} className="size-8 text-gold" aria-label={`Edit ${c.name}`}>
+          <Pencil />
         </Button>
         <Button size="icon" variant="ghost" onClick={onCopy} className="size-8 text-gold" aria-label={`Copy the message for ${c.name}`}>
           <Copy />
@@ -301,6 +312,58 @@ function Row({
           <Trash2 /> {armed && 'Remove'}
         </Button>
       </span>
+    </li>
+  );
+}
+
+/** The row as a small form: change the name on the card or the WhatsApp number, in place. */
+function EditRow({ c, onDone }: { c: ChurchCard; onDone: (changed: boolean) => void }) {
+  const [name, setName] = useState(c.name);
+  const [phone, setPhone] = useState(c.phone);
+  const [busy, setBusy] = useState(false);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return toast.error('Type the name of the person or group.');
+    if (name.trim() === c.name && phone.trim() === c.phone) return onDone(false);
+    setBusy(true);
+    try {
+      await api(`/api/admin/church-cards/${c.id}`, { method: 'PATCH', body: { name, phone } });
+      toast.success(c.sentAt ? 'Saved. Send it again so they get the new card.' : 'Saved');
+      onDone(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Couldn’t save');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li className="border-b border-hairline-soft px-4 py-3 last:border-0">
+      <form
+        onSubmit={save}
+        onKeyDown={(e) => e.key === 'Escape' && onDone(false)}
+        className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,14em)_auto] sm:items-center"
+        aria-label={`Edit ${c.name}`}
+      >
+        <Input autoFocus required value={name} onChange={(e) => setName(e.target.value)} aria-label="Name on the card" maxLength={80} className="h-9" />
+        <Input
+          inputMode="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          aria-label="WhatsApp number"
+          placeholder="No number"
+          maxLength={30}
+          className="h-9"
+        />
+        <span className="flex gap-1.5">
+          <Button type="submit" size="sm" disabled={busy}>
+            {busy ? <Loader2 className="animate-spin" /> : <Check />} Save
+          </Button>
+          <Button type="button" size="icon" variant="ghost" onClick={() => onDone(false)} className="size-8 text-ivory-dim" aria-label="Cancel">
+            <X />
+          </Button>
+        </span>
+      </form>
     </li>
   );
 }

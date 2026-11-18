@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { api, ApiError } from '@/lib/api';
 import type { Guest, SendKind, WaSend, WhatsAppStatus } from '@/lib/types';
+import { SteadyText } from '@/components/ui/steady-text';
 
 type Phase = 'confirm' | 'sending' | 'done';
 const PAUSE_MS = 600; // a steady pace keeps the number in good standing with WhatsApp
@@ -112,7 +113,7 @@ export function WhatsAppSendDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            From {from}, with the {[...kinds].map((k) => `“${tpl(k)?.name}”`).join(' and ')} {kinds.size > 1 ? 'templates' : 'template'}.{' '}
+            From <SteadyText text={from} />, with the {[...kinds].map((k) => `“${tpl(k)?.name}”`).join(' and ')} {kinds.size > 1 ? 'templates' : 'template'}.{' '}
             {kinds.has('trad') && kinds.has('church')
               ? `Guests invited to both weddings get both, traditional first. Here is ${first?.name}’s ${kind === 'church' ? 'church' : 'traditional'} one.`
               : many

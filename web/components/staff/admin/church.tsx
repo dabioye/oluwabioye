@@ -12,6 +12,7 @@ import { ago, longDate, weekday } from '@/lib/format';
 import type { ChurchRsvp } from '@/lib/types';
 import { StaffHeader, StaffPage } from '../staff-shell';
 import { PILL } from './model';
+import { SteadyText } from '@/components/ui/steady-text';
 
 /**
  * Who said at /rsvp on the website that they're coming to church. Kept apart from the invitation desk,
@@ -104,7 +105,9 @@ function ChurchList({ rows, onChanged }: { rows: ChurchRsvp[]; onChanged: () => 
                     {r.name}
                     {r.email && <small className="block text-ivory-dim">{r.email}</small>}
                   </TableCell>
-                  <TableCell className="tabular-nums">{r.phone}</TableCell>
+                  <TableCell className="tabular-nums">
+                    <SteadyText text={r.phone} />
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={r.attending === 'yes' ? PILL.yes.className : PILL.no.className}>
                       {r.attending === 'yes' ? 'Attending' : 'Declined'}

@@ -365,6 +365,27 @@ test('with WhatsApp Business, the desk sends each guest their card and message f
   // Signed in once, through the page (the sign-in limit is 8 a minute and the suite signs in a lot).
   const kemi = await addGuest(page.request, { name: 'Kemi Adeyemi', phone: '0807 777 7777' });
   await addGuest(page.request, { name: 'Bayo Ojo', phone: '08088888888' }, false);
+  // Act like a click-to-call browser extension (3CX and others), which rewrites phone numbers on the page into
+  // its own links. It used to crash the desk when the send dialog closed.
+  await page.addInitScript(() => {
+    const wrap = (root: Node) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const hits: Text[] = [];
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        const t = n as Text;
+        if (/\+?\d[\d ]{9,}\d/.test(t.data) && t.parentElement?.localName !== 'tcxspan' && !t.parentElement?.closest('script,style')) hits.push(t);
+      }
+      for (const t of hits) {
+        const m = /\+?\d[\d ]{9,}\d/.exec(t.data)!;
+        const span = document.createElement('tcxspan');
+        span.textContent = m[0];
+        t.replaceWith(t.data.slice(0, m.index), span, t.data.slice(m.index + m[0].length));
+      }
+    };
+    new MutationObserver((records) => records.forEach((r) => r.addedNodes.forEach(wrap))).observe(document, { childList: true, subtree: true });
+  });
+  const crashes: string[] = [];
+  page.on('pageerror', (e) => crashes.push(e.message));
   await page.goto(`${PUBLIC}/admin`);
   await expect(page.getByText(/WhatsApp Business · ready/i)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('+234 807 269 2636 · Dabioye Solutions')).toBeVisible();
@@ -384,6 +405,8 @@ test('with WhatsApp Business, the desk sends each guest their card and message f
   await expect(dialog.getByText(/Done\. 1 sent of 1/)).toBeVisible({ timeout: 20_000 });
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(row.getByText('WhatsApp queued')).toBeVisible();
+  await expect(page.locator('tcxspan').first()).toBeAttached();
+  expect(crashes).toEqual([]);
 
   // "Message" still sends from WhatsApp on this device: the guest's chat opens with the message, then the card.
   await page.evaluate(() => {
@@ -715,6 +738,24 @@ test('church invitations put a person’s or a group’s name on the church card
   const adeyemi = list.getByRole('listitem').filter({ hasText: `Mr & Mrs Adeyemi ${t}` });
   await expect(adeyemi).toContainText('0803 123 4567');
   await expect(adeyemi).toContainText('Not sent');
+
+  // A name or number can be corrected in place; Escape leaves it as it was.
+  const bello = list.getByRole('listitem').filter({ hasText: `The Bello Family ${t}` });
+  await bello.getByRole('button', { name: `Edit The Bello Family ${t}` }).click();
+  const edit = list.getByRole('form', { name: `Edit The Bello Family ${t}` });
+  await edit.getByLabel('Name on the card').fill(`Dr & Mrs Bello ${t}`);
+  await edit.getByLabel('WhatsApp number').fill('0805 765 4321');
+  await edit.getByRole('button', { name: 'Save' }).click();
+  const drBello = list.getByRole('listitem').filter({ hasText: `Dr & Mrs Bello ${t}` });
+  await expect(drBello).toContainText('0805 765 4321');
+  await expect(list.getByText(`The Bello Family ${t}`)).toHaveCount(0);
+  await drBello.getByRole('button', { name: `Edit Dr & Mrs Bello ${t}` }).click();
+  await list
+    .getByRole('form', { name: `Edit Dr & Mrs Bello ${t}` })
+    .getByLabel('Name on the card')
+    .fill('Someone else');
+  await page.keyboard.press('Escape');
+  await expect(drBello).toContainText(`Dr & Mrs Bello ${t}`);
 
   // WhatsApp opens their chat with the message (website and RSVP, no private link), and the card follows.
   let opened = '';
