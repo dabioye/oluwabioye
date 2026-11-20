@@ -207,10 +207,13 @@ export type BudgetFund = {
   id: string;
   source: string;
   from: string;
+  phone?: string;
   pledged: number;
   received: number;
   date: string;
   notes: string;
+  /** When the thank-you message went out, or '' if it hasn't. */
+  thankedAt?: string;
   createdAt: string;
   updatedAt: string;
 };

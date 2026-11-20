@@ -695,14 +695,30 @@ test('the budget needs the couple’s own passcode on top of the admin password'
   await page.getByLabel('Promised (₦)').fill('5,000,000');
   await page.getByRole('button', { name: 'Record', exact: true }).click();
   const received = page.getByRole('list', { name: 'Funds received' });
-  await expect(received.getByRole('button', { name: /Mum & Dad/ })).toContainText('Part received');
+  await expect(received.getByRole('button', { name: /^Mum & Dad/ })).toContainText('Part received');
   await expect(funds).toContainText(/Funds received.*2,000,000.*3,000,000 more promised/);
   await expect(funds).toContainText(/Paid beyond funds.*500,000/);
-  await received.getByRole('button', { name: /Mum & Dad/ }).click();
+  await received.getByRole('button', { name: /^Mum & Dad/ }).click();
   await page.getByRole('button', { name: 'All received' }).click();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(funds).toContainText(/Funds in hand.*2,500,000/);
-  await expect(received.getByRole('button', { name: /Mum & Dad/ })).not.toContainText('Part received');
+  await expect(received.getByRole('button', { name: /^Mum & Dad/ })).not.toContainText('Part received');
+
+  // A thank-you from the couple's own WhatsApp, with the message ready to send.
+  await page.evaluate(() => {
+    const w = window as unknown as { opened: string[] };
+    w.opened = [];
+    window.open = (url?: string | URL) => (w.opened.push(String(url)), null);
+  });
+  await received.getByRole('button', { name: 'Say thank you to Mum & Dad on WhatsApp' }).click();
+  await expect(page.getByLabel('Message')).toHaveValue(/^Dear Mum & Dad,\n\nThank you so much for your generous gift/);
+  await page.getByLabel('WhatsApp number').fill('0803 123 4567');
+  await page.getByRole('button', { name: 'Open WhatsApp' }).click();
+  await expect(received.getByRole('button', { name: /^Mum & Dad/ })).toContainText('Thanked');
+  await expect(received.getByRole('button', { name: /^Mum & Dad/ })).toContainText('0803 123 4567');
+  const opened = await page.evaluate(() => (window as unknown as { opened: string[] }).opened);
+  expect(opened).toHaveLength(1);
+  expect(opened[0]).toMatch(/^https:\/\/wa\.me\/2348031234567\?text=Dear%20Mum%20%26%20Dad/);
 
   // Locked again, the planning team's admin password alone doesn't open it.
   await page.getByRole('button', { name: 'Lock' }).click();

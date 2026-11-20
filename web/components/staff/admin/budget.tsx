@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarClock, Check, Download, HandCoins, KeyRound, Loader2, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Check, Download, HandCoins, Heart, KeyRound, Loader2, Lock, MessageCircle, Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -24,6 +24,8 @@ import { longDate } from '@/lib/format';
 import type { BudgetData, BudgetFund, BudgetItem } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { StaffHeader, StaffPage } from '../staff-shell';
+import { SteadyText } from '@/components/ui/steady-text';
+import { waNumber } from './model';
 
 const naira = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
 const money = (n: number) => naira.format(n || 0);
@@ -156,6 +158,7 @@ function BudgetView({ onLocked }: { onLocked: () => void }) {
   const [data, setData] = useState<BudgetData | null>(null);
   const [editing, setEditing] = useState<Partial<BudgetItem> | null>(null);
   const [editingFund, setEditingFund] = useState<Partial<BudgetFund> | null>(null);
+  const [thanking, setThanking] = useState<BudgetFund | null>(null);
   const [category, setCategory] = useState('all');
 
   const load = useCallback(
@@ -333,7 +336,7 @@ function BudgetView({ onLocked }: { onLocked: () => void }) {
           ) : (
             <ul className="m-0 list-none p-0" aria-label="Funds received">
               {funds.map((f) => (
-                <FundRow key={f.id} f={f} onEdit={() => setEditingFund(f)} />
+                <FundRow key={f.id} f={f} onEdit={() => setEditingFund(f)} onThank={() => setThanking(f)} />
               ))}
             </ul>
           )}
@@ -392,6 +395,7 @@ function BudgetView({ onLocked }: { onLocked: () => void }) {
         </div>
       </div>
 
+      {thanking && <ThankDialog key={thanking.id} fund={thanking} onClose={() => setThanking(null)} onSaved={load} />}
       {editingFund && (
         <FundDialog key={editingFund.id || 'new'} fund={editingFund} sources={data.sources} onClose={() => setEditingFund(null)} onSaved={load} />
       )}
@@ -511,13 +515,16 @@ function Line({ b, onEdit }: { b: BudgetItem; onEdit: () => void }) {
   );
 }
 
-function FundRow({ f, onEdit }: { f: BudgetFund; onEdit: () => void }) {
+/** Our own savings and loans aren't gifts, so they get no thank-you. */
+const isGift = (f: BudgetFund) => !['Our savings', 'Loan'].includes(f.source);
+
+function FundRow({ f, onEdit, onThank }: { f: BudgetFund; onEdit: () => void; onThank: () => void }) {
   return (
-    <li className="border-b border-hairline-soft last:border-0">
+    <li className="flex items-center border-b border-hairline-soft last:border-0 hover:bg-gold/5">
       <button
         type="button"
         onClick={onEdit}
-        className="grid w-full cursor-pointer gap-1 border-0 bg-transparent px-4 py-3 text-left hover:bg-gold/5 sm:grid-cols-[minmax(0,1fr)_auto]"
+        className="grid min-w-0 flex-1 cursor-pointer gap-1 border-0 bg-transparent px-4 py-3 text-left sm:grid-cols-[minmax(0,1fr)_auto]"
       >
         <span className="min-w-0">
           <b className="block font-medium [overflow-wrap:anywhere] text-ivory">
@@ -527,15 +534,131 @@ function FundRow({ f, onEdit }: { f: BudgetFund; onEdit: () => void }) {
                 {f.received ? 'Part received' : 'Promised'}
               </Badge>
             )}
+            {f.thankedAt && (
+              <Badge variant="outline" className="ml-2 border-ok/50 align-middle text-[0.65rem] font-normal text-ok">
+                Thanked
+              </Badge>
+            )}
           </b>
-          <small className="block text-[0.78rem] text-ivory-dim">{[f.source, f.date && `received ${longDate(f.date)}`].filter(Boolean).join(' · ')}</small>
+          <small className="block text-[0.78rem] text-ivory-dim">
+            {[f.source, f.date && `received ${longDate(f.date)}`].filter(Boolean).join(' · ')}
+            {f.phone && (
+              <>
+                {' · '}
+                <SteadyText text={f.phone} />
+              </>
+            )}
+          </small>
         </span>
         <span className="grid justify-items-start text-[0.85rem] tabular-nums sm:justify-items-end">
           <span className="font-medium">{money(f.received)}</span>
           {promised(f) > 0 && <small className="text-[0.75rem] text-ivory-dim">of {money(f.pledged)} promised</small>}
         </span>
       </button>
+      {isGift(f) && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onThank}
+          className={cn('mr-2 shrink-0', f.thankedAt ? 'text-ok' : 'text-gold')}
+          aria-label={`${f.thankedAt ? 'Thanked' : 'Say thank you to'} ${f.from} on WhatsApp`}
+          title={f.thankedAt ? `Thanked ${longDate(f.thankedAt.slice(0, 10))}` : 'Say thank you on WhatsApp'}
+        >
+          <Heart className={f.thankedAt ? 'fill-current' : undefined} />
+        </Button>
+      )}
     </li>
+  );
+}
+
+const thankYou = (f: BudgetFund) =>
+  `Dear ${f.from},\n\nThank you so much for your generous gift towards our wedding. Your love and support mean the world to us, and we are truly grateful.\n\nWith love,\nSarah & Damilare`;
+
+/**
+ * A thank-you to whoever gave, sent from the couple's own WhatsApp (not the Business number): the chat
+ * opens with the message ready to edit and send, and the entry is marked as thanked.
+ */
+function ThankDialog({ fund, onClose, onSaved }: { fund: BudgetFund; onClose: () => void; onSaved: () => void }) {
+  const [text, setText] = useState(() => thankYou(fund));
+  const [phone, setPhone] = useState(fund.phone || '');
+  const [busy, setBusy] = useState(false);
+  const to = waNumber(phone);
+
+  async function mark(thanked: boolean, body: Record<string, unknown> = {}) {
+    await api(`/api/budget/funds/${fund.id}`, { method: 'PATCH', body: { ...body, thanked } });
+    onSaved();
+  }
+
+  async function send() {
+    window.open(`https://wa.me/${to}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    setBusy(true);
+    try {
+      await mark(true, phone !== (fund.phone || '') ? { phone } : {});
+      toast.success(to ? `WhatsApp opened. Press send there to thank ${fund.from}.` : 'WhatsApp opened. Choose the chat, then press send.');
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Couldn’t mark it as thanked');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[92vh] max-w-lg overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Thank {fund.from}</DialogTitle>
+          <DialogDescription>
+            {fund.thankedAt
+              ? `You thanked them on ${longDate(fund.thankedAt.slice(0, 10))}. You can send another message if you like.`
+              : 'This opens WhatsApp on your phone or computer with the message ready. Change anything you like, then press send there.'}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="thank-phone" className={labelClass}>
+              WhatsApp number
+            </Label>
+            <Input
+              id="thank-phone"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              inputMode="tel"
+              placeholder="e.g. 0803 123 4567"
+              className="h-10"
+            />
+            {!to && <small className="text-[0.75rem] text-ivory-dim">Without a number, WhatsApp asks you to choose the chat.</small>}
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="thank-text" className={labelClass}>
+              Message
+            </Label>
+            <Textarea id="thank-text" value={text} onChange={(e) => setText(e.target.value)} rows={8} />
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:justify-between">
+          {fund.thankedAt ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={async () => {
+                await mark(false);
+                toast.success('Marked as not thanked');
+                onClose();
+              }}
+            >
+              Mark as not thanked
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button type="button" onClick={send} disabled={busy || !text.trim()} className="bg-[#1f7a4d] text-white hover:bg-[#25915b]">
+            {busy ? <Loader2 className="animate-spin" /> : <MessageCircle />} Open WhatsApp
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -558,12 +681,13 @@ function ConfirmDelete({ open, onOpenChange, name, onDelete }: { open: boolean; 
   );
 }
 
-type FundForm = { source: string; from: string; pledged: string; received: string; date: string; notes: string };
+type FundForm = { source: string; from: string; phone: string; pledged: string; received: string; date: string; notes: string };
 
 function FundDialog({ fund, sources, onClose, onSaved }: { fund: Partial<BudgetFund>; sources: string[]; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState<FundForm>({
     source: fund.source || '',
     from: fund.from || '',
+    phone: fund.phone || '',
     pledged: num(fund.pledged),
     received: num(fund.received),
     date: fund.date || (fund.id ? '' : today()),
@@ -631,6 +755,7 @@ function FundDialog({ fund, sources, onClose, onSaved }: { fund: Partial<BudgetF
           </div>
           {field('pledged', 'Promised (₦)', { inputMode: 'numeric', placeholder: 'If more is coming' })}
           {field('date', 'Date received', { type: 'date' })}
+          {field('phone', 'WhatsApp number', { inputMode: 'tel', placeholder: 'For your thank-you' })}
           <div className="grid gap-1.5 sm:col-span-2">
             <Label htmlFor="f-notes" className={labelClass}>
               Notes
