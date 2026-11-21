@@ -765,6 +765,19 @@ test('church invitations put a person’s or a group’s name on the church card
   const drBello = list.getByRole('listitem').filter({ hasText: `Dr & Mrs Bello ${t}` });
   await expect(drBello).toContainText('0805 765 4321');
   await expect(list.getByText(`The Bello Family ${t}`)).toHaveCount(0);
+
+  // Search by name, or by number however it's typed.
+  const search = page.getByLabel('Search church invitations');
+  await search.fill(`bello ${t}`);
+  await expect(list.getByRole('listitem')).toHaveCount(1);
+  await expect(list).toContainText(`Dr & Mrs Bello ${t}`);
+  await search.fill('+234 803 123');
+  await expect(list).toContainText(`Mr & Mrs Adeyemi ${t}`);
+  await expect(list).not.toContainText(`Dr & Mrs Bello ${t}`);
+  await search.fill(`nobody ${t}`);
+  await expect(page.getByText(`No invitation matches “nobody ${t}”.`)).toBeVisible();
+  await search.fill('');
+  await expect(list.getByText(`Dr & Mrs Bello ${t}`)).toBeVisible();
   await drBello.getByRole('button', { name: `Edit Dr & Mrs Bello ${t}` }).click();
   await list
     .getByRole('form', { name: `Edit Dr & Mrs Bello ${t}` })

@@ -58,6 +58,7 @@ export function ChurchCards() {
   // With the church template approved, invitations with a number go from the couple's WhatsApp Business number.
   const [wa, setWa] = useState<WhatsAppStatus | null>(null);
   const [business, setBusiness] = useState<WaSend<ChurchCard>[] | null>(null);
+  const [q, setQ] = useState('');
   useEffect(() => {
     load();
     api<WhatsAppStatus>('/api/admin/whatsapp').then(setWa, () => {});
@@ -110,6 +111,13 @@ export function ChurchCards() {
   const sent = cards.filter((c) => c.sentAt).length;
   const viaBusiness = (c: ChurchCard) => !!wa?.churchReady && !!waNumber(c.phone);
   const unsent = cards.filter((c) => viaBusiness(c) && !c.sentAt);
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    // Numbers match however they're typed: "0803 123", "+234803123" and "803-123" all find the same card.
+    const local = needle.replace(/\D/g, '').replace(/^0/, '');
+    if (!needle) return cards;
+    return cards.filter((c) => c.name.toLowerCase().includes(needle) || (local.length >= 3 && waNumber(c.phone).includes(local)));
+  }, [cards, q]);
   const sendBusiness = (list: ChurchCard[]) => setBusiness(list.map((guest) => ({ guest, kind: 'church' as const })));
 
   return (
@@ -137,19 +145,31 @@ export function ChurchCards() {
           <Card className="min-w-0 gap-0 border-hairline-soft bg-navy-2/60 py-0">
             <CardHeader className="border-b border-hairline-soft px-4 py-3 [.border-b]:pb-3">
               <CardTitle className="ui-caps text-[0.72rem] text-ivory-dim">
-                Invitations ({cards.length}) · {sent} sent
+                Invitations ({shown.length === cards.length ? cards.length : `${shown.length} of ${cards.length}`}) · {sent} sent
               </CardTitle>
               {unsent.length > 0 && (
                 <Button size="sm" onClick={() => sendBusiness(unsent)} className="mt-2 w-fit bg-[#1f7a4d] text-white hover:bg-[#25915b]">
                   <Send /> Send the {unsent.length} not sent via WhatsApp
                 </Button>
               )}
+              {cards.length > 0 && (
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  type="search"
+                  placeholder="Search name or number"
+                  aria-label="Search church invitations"
+                  className="mt-2 h-10"
+                />
+              )}
             </CardHeader>
             {cards.length === 0 ? (
               <p className="p-8 text-center text-ivory-dim">No one yet. Add a name, e.g. “Mr & Mrs Adeyemi” or “RCCG Youth Choir”.</p>
+            ) : shown.length === 0 ? (
+              <p className="p-8 text-center text-ivory-dim">No invitation matches “{q.trim()}”.</p>
             ) : (
               <ul className="m-0 list-none p-0" aria-label="Church invitations">
-                {cards.map((c) => (
+                {shown.map((c) => (
                   <Row
                     key={c.id}
                     c={c}
