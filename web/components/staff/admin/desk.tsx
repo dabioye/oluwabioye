@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarClock, Copy, Download, ImageDown, Link2, Mail, MessageCircle, Plus, Send, Upload, X } from 'lucide-react';
+import { Bell, CalendarClock, Copy, Download, ImageDown, Link2, Mail, MessageCircle, Plus, Send, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,8 @@ import { GuestDialog } from './guest-dialog';
 import { ImportDialog } from './import-dialog';
 import { SendCardDialog } from './send-card-dialog';
 import { WhatsAppSendDialog } from './whatsapp-send-dialog';
-import { activityText, CHANNEL_LABEL, PILL, sendHref, whatsAppHref, type Stage, STAGES, stageOf, WA_TAG } from './model';
+import { activityText, CHANNEL_LABEL, needsNudge, PILL, sendHref, whatsAppHref, type Stage, STAGES, stageOf, WA_TAG } from './model';
+import { NudgeDialog } from './nudge-dialog';
 import { SteadyText } from '@/components/ui/steady-text';
 
 type Data = { guests: Guest[]; activity: Activity[]; inviteUrl: string };
@@ -70,6 +71,7 @@ export function Desk() {
   const [q, setQ] = useState('');
   const [side, setSide] = useState<Side | 'any'>('any');
   const [failedOnly, setFailedOnly] = useState(false);
+  const [nudging, setNudging] = useState(false);
   const [editing, setEditing] = useState<Guest | null | undefined>(undefined); // undefined = closed, null = new
   const [importing, setImporting] = useState(false);
 
@@ -230,6 +232,8 @@ export function Desk() {
     );
     return [...byReason].map(([reason, sends]) => ({ reason, sends })).sort((a, b) => b.sends.length - a.sends.length);
   }, [guests]);
+  // Guests who were sent their invitation but haven't replied: the RSVP reminder.
+  const toNudge = useMemo(() => guests.filter(needsNudge).sort((a, b) => a.name.localeCompare(b.name)), [guests]);
   const failedGuests = useMemo(() => guests.filter((g) => failedKinds(g).length > 0).length, [guests]);
 
   async function markSent(g: Guest, via: string) {
@@ -355,6 +359,7 @@ export function Desk() {
           { href: '/admin/budget', label: 'Budget' },
           { href: '/admin/site', label: 'Edit website' },
           { href: '/', label: 'Website', external: true },
+          { href: '/admin/tables', label: 'Tables' },
           { href: '/admin/gate-list', label: 'Gate list' },
           ...(data ? [{ href: `${data.inviteUrl}/checkin`, label: 'Gate', external: true }] : []),
         ]}
@@ -509,6 +514,17 @@ export function Desk() {
                 </Button>
               </div>
             )}
+            {toNudge.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-warn/10 px-3 py-2.5 text-[0.85rem]">
+                <span>
+                  {toNudge.length} {toNudge.length === 1 ? 'guest hasn’t' : 'guests haven’t'} replied yet · RSVP by {longDate(cfg.rsvpBy)}
+                  {toNudge.some((g) => g.nudgedAt) && <span className="text-ivory-dim"> · {toNudge.filter((g) => g.nudgedAt).length} reminded</span>}
+                </span>
+                <Button size="sm" variant="outline" className="border-warn/60 bg-transparent text-warn" onClick={() => setNudging(true)}>
+                  <Bell /> Remind them to RSVP
+                </Button>
+              </div>
+            )}
             {stage === 'new' && unsent.length > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-gold/10 px-3 py-2.5 text-[0.85rem]">
                 <span>{unsent.length} ready to send</span>
@@ -640,6 +656,21 @@ export function Desk() {
 
       <GuestDialog open={editing !== undefined} guest={editing ?? null} groups={groups} onClose={() => setEditing(undefined)} onSaved={refresh} />
       {wa && <WhatsAppSendDialog sends={waSending} wa={wa} render={renderFor} onProgress={refresh} onClose={() => setWaSending(null)} />}
+      {nudging && (
+        <NudgeDialog
+          guests={toNudge}
+          onClose={() => setNudging(false)}
+          onChanged={refresh}
+          onBusiness={
+            wa?.reminderReady
+              ? (list) => {
+                  setNudging(false);
+                  setWaSending(list.filter(reachable).map((guest) => ({ guest, kind: 'reminder' as const })));
+                }
+              : undefined
+          }
+        />
+      )}
       <SendCardDialog guest={cardStep} render={cardsFor} onClose={() => setCardStep(null)} />
       <ImportDialog open={importing} onClose={() => setImporting(false)} onImported={refresh} />
     </StaffPage>

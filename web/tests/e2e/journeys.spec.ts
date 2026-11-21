@@ -324,6 +324,66 @@ test('failed WhatsApp sends can be filtered, are grouped by reason with what to 
   await expect(why).toHaveCount(0);
 });
 
+test('guests who haven’t replied are reminded to RSVP from the couple’s own WhatsApp, one at a time', async ({ page }) => {
+  const t = Date.now().toString(36);
+  // A leading digit puts this guest first in the reminder list, whatever other tests added.
+  const g = await addGuest(page.request, { name: `0 Nudge ${t}`, phone: '0803 777 0001', events: ['trad'] });
+  await page.request.post(`${PUBLIC}/api/admin/guests/${g.id}/sent`, { data: { via: 'whatsapp' } });
+  await page.addInitScript(() => {
+    const w = window as unknown as { opened: string[] };
+    w.opened = [];
+    window.open = (url?: string | URL) => (w.opened.push(String(url)), null);
+  });
+
+  await page.goto(`${PUBLIC}/admin`);
+  await page.getByRole('button', { name: 'Remind them to RSVP' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Remind guests to RSVP' });
+  await expect(dialog).toContainText(`0 Nudge ${t}`);
+  const text = dialog.getByLabel(`Reminder for 0 Nudge ${t}`);
+  await expect(text).toHaveValue(new RegExp(`^Dear 0 Nudge ${t},[\\s\\S]*Kindly RSVP[\\s\\S]*/i/${g.code}`));
+  await dialog.getByRole('button', { name: 'Open WhatsApp' }).click();
+  await expect(dialog).not.toContainText(`0 Nudge ${t}`);
+  const opened = await page.evaluate(() => (window as unknown as { opened: string[] }).opened);
+  expect(opened[0]).toMatch(new RegExp(`^https://wa\\.me/2348037770001\\?text=Dear%200%20Nudge%20${t}`));
+  await page.keyboard.press('Escape');
+  await expect(page.getByText(`Reminded 0 Nudge ${t} to RSVP`)).toBeVisible();
+
+  // Already reminded: skipped next time unless asked for.
+  await page.getByRole('button', { name: 'Remind them to RSVP' }).click();
+  await expect(dialog).not.toContainText(`0 Nudge ${t}`);
+  await dialog.getByRole('switch', { name: 'Skip guests already reminded' }).click();
+  await expect(dialog).toContainText(`0 Nudge ${t}`);
+  await expect(dialog).toContainText('reminded just now');
+});
+
+test('the table plan shows who sits where and who is still to place, and seats a guest', async ({ page }) => {
+  const t = Date.now().toString(36);
+  await addGuest(page.request, { name: `Seated Guest ${t}`, phone: '08022220001', events: ['trad'], table: `T${t}` });
+  await addGuest(page.request, { name: `Unplaced Guest ${t}`, phone: '08022220002', events: ['trad'] });
+  await page.goto(`${PUBLIC}/admin`);
+  await page.getByRole('link', { name: 'Tables' }).click();
+  await expect(page.getByText('Table plan', { exact: true })).toBeVisible();
+  const table = page.locator(`[aria-label="T${t}"]`);
+  await expect(table).toContainText(`Seated Guest ${t}`);
+  const toPlace = page.locator('[aria-label="Still to place"]');
+  await expect(toPlace).toContainText(`Unplaced Guest ${t}`);
+  await toPlace.getByLabel(`Table for Unplaced Guest ${t}`).fill(`T${t}`);
+  await toPlace.getByLabel(`Table for Unplaced Guest ${t}`).press('Enter');
+  await expect(table).toContainText(`Unplaced Guest ${t}`);
+  await expect(page.locator('[aria-label="Still to place"]').getByText(`Unplaced Guest ${t}`)).toHaveCount(0);
+});
+
+test('a copy of everything is kept each day and can be downloaded from Edit website', async ({ page }) => {
+  await addGuest(page.request, { name: 'Backup Check', phone: '08022220003' });
+  await page.goto(`${PUBLIC}/admin/site`);
+  const copies = page.getByRole('list', { name: 'Daily copies' });
+  const day = new Date().toISOString().slice(0, 10);
+  await expect(copies.getByRole('link', { name: 'Download' }).first()).toHaveAttribute('href', `/api/admin/backup.json?day=${day}`);
+  const now = await page.request.get(`${PUBLIC}/api/admin/backup.json`);
+  expect(now.ok()).toBeTruthy();
+  expect((await now.json()).guests.some((g: { name: string }) => g.name === 'Backup Check')).toBe(true);
+});
+
 test('sending on WhatsApp from a phone opens the guest’s chat with the message, then shares the card', async ({ page, request }) => {
   const g = await addGuest(request, { name: 'Funke Bello', phone: '08066666666' });
   // Without WhatsApp Business, the desk opens WhatsApp itself. Stand-ins for WhatsApp and the share sheet record what would be sent.

@@ -274,9 +274,27 @@ Set it up like this:
 4. Chase **Sent, not opened** and **Opened, no reply** before the RSVP date.
 5. To change several guests at once, tick them (or **Select all shown** after a search or filter). The bar that appears sets them all to **Church only**, **Traditional only** or **Both**, and offers to send any invitation they're now owed. **Resend invitations** sends each ticked guest every invitation WhatsApp Business can send them again. **Send countdown reminder** sends them the countdown reminder.
 
+## Chasing RSVPs
+
+The desk shows how many guests were sent their invitation but haven't replied. **Remind them to RSVP** goes through them one at a time: each guest's chat opens on your own WhatsApp with a reminder and their link, ready to send (free, and from a number they know). Each reminder is recorded, and guests already reminded are skipped unless you switch that off. Once the countdown template is approved, the same dialog can send them all the countdown reminder from the Business number instead.
+
+The red **WhatsApp failed** chip filters the desk to guests whose WhatsApp Business send failed, grouped by Meta's reason with what to do about each, and a **Retry** for each group (it previews first).
+
+## Table plan (`/admin/tables`)
+
+Everyone invited to the reception who hasn't declined, by table, plus who is **still to place**. Type a table in a guest's box to seat or move them; the gate and their access card show it. Counts are invitations, not people. **Print** gives the planners a copy.
+
 ## On the day
 
-Give ushers `/checkin` and the PIN. Green = welcome, amber = card already used, red = not on the list or declined.
+Give ushers `/checkin` and the PIN. Green = welcome, amber = card already used, red = not on the list or declined. If a check-in can't reach the server, a red **Not checked in** panel says so, with **Try again**; a banner shows while the phone is offline.
+
+Print the **Gate list** (`/admin/gate-list`, top of the desk) the night before: everyone invited to the reception, A to Z (titles ignored), with code, table, RSVP, driver card and a box to tick. It's the fallback if phones or the network fail.
+
+## Backups
+
+A copy of everything (guests, church invitations and RSVPs, wishes, WhatsApp messages, activity, enquiries, settings and the budget) is made on the first admin visit of each day and kept for 14 days in Firestore (`private/backup-*`). **Edit website → Backups** lists them and downloads any day's copy, or everything as it is now, as JSON. Downloads include the budget only while the budget is unlocked. Photos aren't included. Download one now and then to keep a copy off Firebase.
+
+To restore, give a downloaded copy to whoever maintains the site: each list in it (`guests`, `churchCards`, …) maps to the Firestore collection of the same name.
 
 ## Switching from the old single site (one time)
 

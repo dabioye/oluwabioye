@@ -103,6 +103,9 @@ export type Guest = {
   /** Email invitation: when it was sent, or why the mail server refused it. */
   emailSentAt?: string;
   emailError?: string;
+  /** Reminders to RSVP sent from the couple's own WhatsApp: the last one, and how many. */
+  nudgedAt?: string;
+  nudges?: number;
 };
 
 /** GET /api/admin/whatsapp: whether invitations can go out through WhatsApp Business. */

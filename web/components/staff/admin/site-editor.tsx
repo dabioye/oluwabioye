@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUp, ImagePlus, Loader2, Plus, Save, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Download, ImagePlus, Loader2, Plus, Save, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError } from '@/lib/api';
 import type { StoryMoment } from '@/lib/config';
+import { longDate } from '@/lib/format';
 import { shrink } from '@/lib/image';
 import { NAME_FONTS } from '@/lib/invitation';
 import type { EmailStatus, SiteSettings, WhatsAppStatus } from '@/lib/types';
@@ -470,6 +471,8 @@ export function SiteEditor() {
               </p>
             </fieldset>
           </Section>
+
+          <Backups />
         </div>
       )}
 
@@ -480,5 +483,55 @@ export function SiteEditor() {
         </Button>
       </div>
     </StaffPage>
+  );
+}
+
+type BackupDay = { day: string; at: string; size: number; guests: number };
+
+/** The daily copies of everything, kept for two weeks, and a download of any of them. */
+function Backups() {
+  const [days, setDays] = useState<BackupDay[] | null>(null);
+  const [keep, setKeep] = useState(14);
+  useEffect(() => {
+    api<{ days: BackupDay[]; keep: number }>('/api/admin/backups').then(
+      (d) => {
+        setDays(d.days);
+        setKeep(d.keep);
+      },
+      () => setDays([]),
+    );
+  }, []);
+  return (
+    <Section
+      title="Backups"
+      description={`A copy of the guest list, RSVPs, church invitations, wishes, messages and settings is made each day and kept for ${keep} days. Download one now and then to keep a copy of your own. The budget is only in downloads made while the budget is unlocked.`}
+    >
+      <Button asChild variant="outline" className="w-fit border-gold/40 bg-transparent text-gold">
+        <a href="/api/admin/backup.json" download>
+          <Download /> Download everything as it is now
+        </a>
+      </Button>
+      {!days ? (
+        <p className="m-0 text-[0.85rem] text-ivory-dim">Checking backups…</p>
+      ) : days.length === 0 ? (
+        <p className="m-0 text-[0.85rem] text-ivory-dim">No daily copies yet. The first is made the next time the desk is opened.</p>
+      ) : (
+        <ul className="m-0 grid list-none gap-1 p-0 text-[0.85rem]" aria-label="Daily copies">
+          {days.map((d) => (
+            <li key={d.day} className="flex items-center justify-between gap-3 border-b border-hairline-soft py-1.5 last:border-0">
+              <span>
+                {longDate(d.day)}
+                <small className="ml-2 text-ivory-dim">
+                  {d.guests} guests · {Math.max(1, Math.round(d.size / 1024))} KB
+                </small>
+              </span>
+              <a href={`/api/admin/backup.json?day=${d.day}`} download className="text-gold">
+                Download
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
   );
 }
