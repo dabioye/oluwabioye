@@ -46,10 +46,14 @@ function cleanFund(input = {}, existing = null) {
     id: existing?.id || crypto.randomUUID(),
     source: pick('source', (v) => str(v, 60) || 'Other'),
     from: pick('from', (v) => str(v, 120)),
+    // Their WhatsApp number, for the thank-you message the couple sends from their own phone.
+    phone: pick('phone', (v) => str(v, 30)),
     pledged: pick('pledged', money),
     received: pick('received', money),
     date: pick('date', date),
     notes: pick('notes', (v) => str(v, 1000)),
+    // When the thank-you went out: `thanked: true` stamps it now, `thanked: false` clears it.
+    thankedAt: 'thanked' in input ? (input.thanked ? existing?.thankedAt || new Date().toISOString() : '') : existing?.thankedAt || '',
     createdAt: existing?.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

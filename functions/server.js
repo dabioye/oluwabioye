@@ -594,7 +594,7 @@ priv.patch('/funds/:id', needCouple, wrap(async (req, res) => {
 priv.delete('/funds/:id', needCouple, wrap(async (req, res) => res.json({ ok: await budget.removeFund(req.params.id) })));
 priv.get('/funds.csv', needCouple, wrap(async (req, res) => {
   res.type('text/csv').set('Content-Disposition', 'attachment; filename="wedding-funds.csv"')
-    .send(toCsv(await budget.funds(), ['source', 'from', 'pledged', 'received', 'date', 'notes']));
+    .send(toCsv(await budget.funds(), ['source', 'from', 'phone', 'pledged', 'received', 'date', 'thankedAt', 'notes']));
 }));
 priv.get('/export.csv', needCouple, wrap(async (req, res) => {
   res.type('text/csv').set('Content-Disposition', 'attachment; filename="wedding-budget.csv"')
