@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, CameraOff, Search } from 'lucide-react';
+import { Camera, CameraOff, RotateCw, Search, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,8 @@ import { useSession } from './session';
 
 type Stats = { checkedIn: number; expected: number; recent: { name: string; at: string; table?: string }[] };
 type Match = { name: string; code: string; rsvp: string; checkedInAt: string | null; table?: string };
+/** A check-in that didn't reach the server: the guest is NOT checked in until it's tried again. */
+type Problem = { code: string; undo: boolean; message: string };
 type Scanner = { start: (...a: unknown[]) => Promise<unknown>; stop: () => Promise<void>; clear: () => void };
 
 export function GateView() {
@@ -32,6 +34,20 @@ function Gate() {
   const busy = useRef(false);
   const clearResult = useRef<ReturnType<typeof setTimeout>>(undefined);
   const last = useRef({ code: '', at: 0 });
+  const [problem, setProblem] = useState<Problem | null>(null);
+  const [searchFailed, setSearchFailed] = useState(false);
+  const [online, setOnline] = useState(true);
+
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    update();
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
 
   const loadStats = useCallback(
     () =>
@@ -53,6 +69,7 @@ function Gate() {
       busy.current = true;
       try {
         const r = await api<GateResult>('/api/checkin', { body: { code, undo } });
+        setProblem(null);
         setResult(r);
         navigator.vibrate?.(r.status === 'ok' ? 80 : [60, 60, 60]);
         // While scanning, a welcome clears itself so the next guest can be scanned; warnings stay until dealt with.
@@ -62,7 +79,15 @@ function Gate() {
         }
         loadStats();
       } catch (e) {
-        if (e instanceof ApiError && e.status === 401) location.reload();
+        if (e instanceof ApiError && e.status === 401) return location.reload();
+        // Never fail quietly at the gate: an usher must know the guest isn't checked in yet.
+        setResult(null);
+        setProblem({
+          code,
+          undo,
+          message: e instanceof ApiError ? e.message : navigator.onLine ? 'Couldn’t reach the server. The connection may be slow.' : 'This phone is offline.',
+        });
+        navigator.vibrate?.([200, 100, 200]);
       } finally {
         busy.current = false;
       }
@@ -77,9 +102,13 @@ function Gate() {
     if (!searching) return;
     const t = setTimeout(
       () =>
-        api<Match[]>(`/api/checkin/search?q=${encodeURIComponent(term)}`)
-          .then(setMatches)
-          .catch(() => {}),
+        api<Match[]>(`/api/checkin/search?q=${encodeURIComponent(term)}`).then(
+          (m) => {
+            setMatches(m);
+            setSearchFailed(false);
+          },
+          () => setSearchFailed(true),
+        ),
       250,
     );
     return () => clearTimeout(t);
@@ -133,6 +162,11 @@ function Gate() {
   return (
     <StaffPage className="max-w-[640px]">
       <StaffHeader title="Gate check-in" subtitle={stats ? `${stats.checkedIn} arrived of ${stats.expected} expected` : 'Loading…'} />
+      {!online && (
+        <p role="status" className="mt-4 mb-0 flex items-center gap-2 rounded-md border border-warn/60 bg-warn/10 px-3 py-2.5 font-ui text-[0.9rem] text-warn">
+          <WifiOff className="size-4 shrink-0" /> No connection. Check-ins won’t go through until it’s back.
+        </p>
+      )}
       <Card className="mt-4 border-hairline-soft bg-navy-2/60">
         <CardContent className="grid gap-3">
           <div className={camOn ? 'grid gap-2' : 'hidden'}>
@@ -173,6 +207,11 @@ function Gate() {
               <Search />
             </Button>
           </form>
+          {searching && searchFailed && (
+            <p role="alert" className="m-0 font-ui text-[0.85rem] text-bad">
+              Couldn’t search: no connection. Keep typing to try again, or use the printed gate list.
+            </p>
+          )}
           {shown.length > 0 && (
             <div className="grid gap-1.5">
               {shown.map((g) => (
@@ -197,6 +236,26 @@ function Gate() {
           )}
         </CardContent>
       </Card>
+
+      {problem && (
+        <div role="alert" className="mt-4 grid gap-3 rounded-lg border-2 border-bad bg-bad/10 p-4 font-ui">
+          <p className="m-0 flex items-center gap-2 text-lg font-semibold text-bad">
+            <WifiOff className="size-5 shrink-0" /> Not checked in
+          </p>
+          <p className="m-0 text-[0.92rem] text-ivory">
+            {problem.message} {problem.undo ? 'The undo didn’t go through.' : `The guest (${problem.code.replace(/.*\/c\//, '')}) is not checked in yet.`}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="lg" className="h-11" onClick={() => check(problem.code, problem.undo)}>
+              <RotateCw /> Try again
+            </Button>
+            <Button size="lg" variant="outline" className="h-11 border-hairline-soft bg-transparent" onClick={() => setProblem(null)}>
+              Dismiss
+            </Button>
+          </div>
+          <p className="m-0 text-[0.8rem] text-ivory-dim">If it keeps failing, check the guest against the printed gate list and let them in.</p>
+        </div>
+      )}
 
       {result && <GateResultPanel res={result} onUndo={result.guest ? () => check(result.guest!.code, true) : undefined} />}
 
