@@ -188,7 +188,7 @@ function SeatRow({ g, onMove }: { g: Guest; onMove: (g: Guest, table: string) =>
           maxLength={20}
           placeholder="Table"
           aria-label={`Table for ${g.name}`}
-          className="h-8 w-24 text-center text-[0.85rem]"
+          className="h-8 w-32 text-center text-[0.85rem]"
         />
       </form>
     </div>
