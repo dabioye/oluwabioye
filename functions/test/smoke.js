@@ -679,6 +679,34 @@ const store = require('../src/store');
   couple = cookieOf(r);
   assert.equal((await req('/api/budget', { headers: { cookie: couple } })).status, 200);
 
+  // A reminder to RSVP is recorded on the guest and in the activity feed.
+  r = await req('/api/admin/guests', json('POST', { name: 'Nudge Me', phone: '08012345670', events: ['trad'] }, admin));
+  const nudge = await r.json();
+  r = await req(`/api/admin/guests/${nudge.id}/nudged`, json('POST', {}, admin));
+  const nudged = await r.json();
+  assert(nudged.nudgedAt && nudged.nudges === 1, 'reminder recorded');
+  assert.equal((await (await req(`/api/admin/guests/${nudge.id}/nudged`, json('POST', {}, admin))).json()).nudges, 2);
+  const feed = await (await req('/api/admin/guests', { headers: { cookie: admin } })).json();
+  assert(feed.activity.some((x) => x.type === 'nudged' && x.name === 'Nudge Me'));
+  await req(`/api/admin/guests/${nudge.id}`, { method: 'DELETE', headers: { cookie: admin } });
+
+  // Backups: today's copy is made by the first admin request, and kept; downloads leave the budget out
+  // unless the budget is unlocked.
+  const kept = await (await req('/api/admin/backups', { headers: { cookie: admin } })).json();
+  const day = new Date().toISOString().slice(0, 10);
+  assert.equal(kept.days[0].day, day, 'today’s copy exists');
+  assert.equal(typeof kept.days[0].guests, 'number', 'made on the first admin request of the day, so it holds the list as it was then');
+  r = await req(`/api/admin/backup.json?day=${day}`, { headers: { cookie: admin } });
+  assert.match(r.headers.get('content-disposition'), new RegExp(`wedding-backup-${day}.json`));
+  let copy = await r.json();
+  assert(Array.isArray(copy.guests) && copy.guests.length === kept.days[0].guests);
+  assert(Array.isArray(copy.churchCards) && Array.isArray(copy.messages) && copy.settings);
+  assert.equal(copy.budget, undefined, 'no budget for the planners');
+  copy = await (await req('/api/admin/backup.json', { headers: { cookie: couple } })).json();
+  assert(copy.budget && Array.isArray(copy.budget.funds), 'the couple’s copy has the budget');
+  assert.equal((await req('/api/admin/backup.json?day=2001-01-01', { headers: { cookie: admin } })).status, 404);
+  assert.equal((await req('/api/admin/backups')).status, 401, 'backups need sign-in');
+
   r = await req('/api/logout', { method: 'POST', headers: { cookie: admin } });
   assert.match(r.headers.get('set-cookie'), /__session=;/);
   assert.equal((await req('/api/nope')).status, 404);

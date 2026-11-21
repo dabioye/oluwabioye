@@ -152,6 +152,7 @@ function jsonBackend() {
     // Private records kept by name (e.g. the budget passcode), and the budget's lines and funds.
     async getDoc(name) { return JSON.parse(JSON.stringify((state.docs || {})[name] || null)); },
     async setDoc(name, obj) { (state.docs ||= {})[name] = obj; await persist(); },
+    async deleteDoc(name) { if (state.docs) delete state.docs[name]; await persist(); },
     // Simple collections keyed by id: 'budget' (spending lines), 'funds' (money received), 'wishes' (guests' messages).
     async budgetItems(col = 'budget') { return (state[col] || []).map((b) => ({ ...b })); },
     async saveBudgetItem(item, col = 'budget') {
@@ -323,6 +324,7 @@ function firestoreBackend() {
     async saveSettings(obj) { await db.collection('settings').doc('site').set(obj); },
     async getDoc(name) { return data(await db.collection('private').doc(String(name)).get()); },
     async setDoc(name, obj) { await db.collection('private').doc(String(name)).set(obj); },
+    async deleteDoc(name) { await db.collection('private').doc(String(name)).delete(); },
     async budgetItems(col = 'budget') { return (await db.collection(col).get()).docs.map((d) => d.data()); },
     async saveBudgetItem(item, col = 'budget') { await db.collection(col).doc(item.id).set(item); return item; },
     async removeBudgetItem(id, col = 'budget') {

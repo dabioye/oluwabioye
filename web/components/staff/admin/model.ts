@@ -1,3 +1,5 @@
+import { cfg } from '@/lib/config';
+import { longDate, weekday } from '@/lib/format';
 import type { Activity, Guest } from '@/lib/types';
 
 export type Stage = 'all' | 'new' | 'sent' | 'opened' | 'yes' | 'no' | 'in';
@@ -67,6 +69,7 @@ export function activityText(a: Activity) {
     wareply: `${a.name} replied on WhatsApp: “${a.extra}”`,
     wafailed: `WhatsApp invite to ${a.name} failed${a.extra ? `: ${a.extra}` : ''}`,
     church: `${a.name} replied to the church RSVP (${a.extra})`,
+    nudged: `Reminded ${a.name} to RSVP`,
   };
   return t[a.type] || a.type;
 }
@@ -79,3 +82,19 @@ export const WA_TAG = {
   read: { label: 'WhatsApp read', className: 'border-ok bg-ok text-navy' },
   failed: { label: 'WhatsApp failed', className: 'border-bad/50 text-bad' },
 } as const;
+
+/** Invited to the reception, sent their invitation, no reply yet, and reachable on WhatsApp. */
+export const needsNudge = (g: Guest) =>
+  g.events.includes('trad') && g.rsvp === 'pending' && !g.checkedInAt && !!(g.sentAt || g.cardDelivered) && !!waNumber(g.phone);
+
+/** The RSVP reminder, sent from the couple's own WhatsApp. After the RSVP date it asks for a reply as soon as they can. */
+export function nudgeMessage(g: Guest, today = new Date().toISOString().slice(0, 10)) {
+  const by = cfg.rsvpBy >= today ? `by ${weekday(cfg.rsvpBy)}, ${longDate(cfg.rsvpBy)}` : 'as soon as you can';
+  return [
+    `Dear ${g.name},`,
+    `A gentle reminder to let us know if you’ll be joining us at The Making of Oluwabioye, our traditional wedding and reception, on ${weekday()}, ${longDate(cfg.date)}.`,
+    `Kindly RSVP ${by}, so we can plan for you.`,
+    `Your invitation and RSVP: ${g.link}`,
+    'With love,\nSarah & Damilare',
+  ].join('\n\n');
+}

@@ -13,6 +13,7 @@ const { weekday, longDate } = require('./src/dates');
 const { parseCsv, toCsv } = require('./src/csv');
 const whatsapp = require('./src/whatsapp');
 const budget = require('./src/budget');
+const backup = require('./src/backup');
 const email = require('./src/email');
 const leads = require('./src/leads');
 const wishes = require('./src/wishes');
@@ -325,6 +326,9 @@ app.post('/api/whatsapp/webhook', wrap(async (req, res) => {
 // ---------- admin ----------
 const api = express.Router();
 api.use(needAdmin);
+// The day's backup is made on the first admin request of the day (awaited: a Cloud Function may stop work
+// left running after its response). It never blocks the request if it fails.
+api.use(wrap(async (req, res, next) => { await backup.daily(); next(); }));
 const guestOr404 = async (req, res) => {
   const g = await store.byId(req.params.id);
   if (!g) res.status(404).json({ error: 'Guest not found' });
@@ -371,6 +375,21 @@ api.post('/guests/bulk', wrap(async (req, res) => {
 api.post('/guests/:id/sent', wrap(async (req, res) => {
   const g = await guestOr404(req, res); if (!g) return;
   res.json(await publicGuest(req.body.sent === false ? await store.unmarkSent(g) : await store.markSent(g, req.body.via)));
+}));
+// A reminder to RSVP, sent from the couple's own WhatsApp; recorded so the desk knows who was reminded and when.
+api.post('/guests/:id/nudged', wrap(async (req, res) => {
+  const g = await guestOr404(req, res); if (!g) return;
+  res.json(await publicGuest(await store.setWa(g.id, { nudgedAt: new Date().toISOString(), nudges: (g.nudges || 0) + 1 }, 'nudged', '')));
+}));
+// Backups: the daily copies kept, and a download of one (or of everything as it is now). The budget is
+// left out unless the budget is unlocked.
+api.get('/backups', wrap(async (req, res) => res.json({ days: await backup.list(), keep: backup.KEEP })));
+api.get('/backup.json', wrap(async (req, res) => {
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(req.query.day || '') ? req.query.day : '';
+  const snap = day ? await backup.read(day) : await backup.snapshot({ withBudget: isCouple(req) });
+  if (!snap) return res.status(404).json({ error: 'There’s no copy for that day' });
+  if (!isCouple(req)) delete snap.budget;
+  res.set('Content-Disposition', `attachment; filename="wedding-backup-${day || snap.at.slice(0, 10)}.json"`).json(snap);
 }));
 api.post('/guests/:id/rsvp', wrap(async (req, res) => {
   const g = await guestOr404(req, res); if (!g) return;
