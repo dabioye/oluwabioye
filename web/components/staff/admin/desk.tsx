@@ -33,6 +33,21 @@ const church = cfg.churchCard;
 const wants = (g: Guest): InviteKind[] => (['trad', 'church'] as const).filter((k) => g.events.includes(k));
 const sentId = (g: Guest, k: SendKind) => (k === 'church' ? g.waChurchMessageId : k === 'reminder' ? g.waReminderMessageId : g.waMessageId);
 const waState = (g: Guest, k: InviteKind) => (k === 'church' ? g.waChurchStatus : g.waStatus);
+const waError = (g: Guest, k: InviteKind) => (k === 'church' ? g.waChurchError : g.waError) || 'Delivery failed';
+/** The invitations WhatsApp Business couldn't deliver to this guest. */
+const failedKinds = (g: Guest) => (['trad', 'church'] as InviteKind[]).filter((k) => waState(g, k) === 'failed');
+
+/** What Meta's failure reasons usually mean, and what to do about each. */
+function failureHint(reason: string) {
+  if (/no valid whatsapp number/i.test(reason)) return 'The number is missing or not a phone number. Fix it in their guest record, then retry.';
+  if (/ecosystem|engagement/i.test(reason))
+    return 'Meta held it back to limit marketing messages to this person. Retrying in a day or two may work; sending from your phone always does.';
+  if (/undeliverable|not.*whatsapp|invalid|recipient/i.test(reason))
+    return 'Usually the number isn’t on WhatsApp, or has a digit wrong. Check the number with them before retrying.';
+  if (/opt|stop|block/i.test(reason)) return 'They’ve stopped marketing messages from this number. Send from your phone instead.';
+  return 'Check the number, then retry, or send from your phone.';
+}
+
 const reachable = (g: Guest) => g.channel === 'whatsapp' && !!g.phone && g.rsvp !== 'no';
 const EVENT_CHOICES: { label: string; events: EventKey[] }[] = [
   { label: 'Church only', events: ['church'] },
@@ -54,6 +69,7 @@ export function Desk() {
   const [stage, setStage] = useState<Stage>('all');
   const [q, setQ] = useState('');
   const [side, setSide] = useState<Side | 'any'>('any');
+  const [failedOnly, setFailedOnly] = useState(false);
   const [editing, setEditing] = useState<Guest | null | undefined>(undefined); // undefined = closed, null = new
   const [importing, setImporting] = useState(false);
 
@@ -198,9 +214,23 @@ export function Desk() {
     return guests
       .filter((g) => stage === 'all' || stageOf(g) === stage)
       .filter((g) => side === 'any' || g.side === side)
+      .filter((g) => !failedOnly || failedKinds(g).length > 0)
       .filter((g) => !needle || [g.name, g.phone, g.email, g.group, g.code, g.table].join(' ').toLowerCase().includes(needle))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [guests, stage, side, q]);
+  }, [guests, stage, side, q, failedOnly]);
+
+  // Invitations WhatsApp Business couldn't deliver, grouped by Meta's reason, so numbers get fixed before a resend.
+  const failures = useMemo(() => {
+    const byReason = new Map<string, WaSend[]>();
+    guests.forEach((g) =>
+      failedKinds(g).forEach((kind) => {
+        const reason = waError(g, kind);
+        byReason.set(reason, [...(byReason.get(reason) ?? []), { guest: g, kind }]);
+      }),
+    );
+    return [...byReason].map(([reason, sends]) => ({ reason, sends })).sort((a, b) => b.sends.length - a.sends.length);
+  }, [guests]);
+  const failedGuests = useMemo(() => guests.filter((g) => failedKinds(g).length > 0).length, [guests]);
 
   async function markSent(g: Guest, via: string) {
     await api(`/api/admin/guests/${g.id}/sent`, { body: { via } });
@@ -325,6 +355,7 @@ export function Desk() {
           { href: '/admin/budget', label: 'Budget' },
           { href: '/admin/site', label: 'Edit website' },
           { href: '/', label: 'Website', external: true },
+          { href: '/admin/gate-list', label: 'Gate list' },
           ...(data ? [{ href: `${data.inviteUrl}/checkin`, label: 'Gate', external: true }] : []),
         ]}
         signOutTo="/admin"
@@ -423,7 +454,49 @@ export function Desk() {
                   {s.label} <b className="ml-0.5 tabular-nums">{counts[s.key]}</b>
                 </button>
               ))}
+              {(failedGuests > 0 || failedOnly) && (
+                <button
+                  type="button"
+                  aria-pressed={failedOnly}
+                  onClick={() => setFailedOnly((on) => !on)}
+                  className={cn(
+                    'cursor-pointer rounded-full border border-bad/50 px-3 py-1.5 text-[0.75rem] text-bad transition-colors',
+                    failedOnly && 'border-bad bg-bad text-navy',
+                  )}
+                >
+                  WhatsApp failed <b className="ml-0.5 tabular-nums">{failedGuests}</b>
+                </button>
+              )}
             </div>
+
+            {failedOnly && failures.length > 0 && (
+              <section aria-label="Why WhatsApp sends failed" className="grid gap-2 rounded-md border border-bad/40 bg-bad/5 p-3 text-[0.85rem]">
+                <p className="m-0 text-ivory-dim">
+                  Fix numbers first: open a guest to correct it. Retry shows a preview before anything is sent, and each resend is a paid message.
+                </p>
+                <ul className="m-0 grid list-none gap-2 p-0">
+                  {failures.map(({ reason, sends }) => (
+                    <li key={reason} className="flex flex-wrap items-start justify-between gap-2 border-t border-bad/20 pt-2 first:border-0 first:pt-0">
+                      <span className="min-w-0 flex-1 basis-60">
+                        <b className="font-medium text-ivory [overflow-wrap:anywhere]">
+                          {reason} <span className="text-bad tabular-nums">· {sends.length}</span>
+                        </b>
+                        <small className="block text-ivory-dim">{failureHint(reason)}</small>
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-[#1f7a4d]/60 bg-transparent text-[#5fd39a]"
+                        onClick={() => setWaSending(sends)}
+                        aria-label={`Retry ${sends.length} failed: ${reason}`}
+                      >
+                        <Send /> Retry {sends.length}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             {waPending.length > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-[#1f7a4d]/15 px-3 py-2.5 text-[0.85rem]">

@@ -251,6 +251,79 @@ test('ushers check guests in at the gate', async ({ page, request }) => {
   await expect(page.getByText('Already checked in')).toBeVisible();
 });
 
+test('the gate says plainly when a check-in doesn’t go through, and tries again', async ({ page, context, request }) => {
+  const g = await addGuest(request, { name: 'Kemi Offline', phone: '08055555556', events: ['trad'] });
+  await page.goto(`${INVITE}/checkin`);
+  await page.getByLabel('PIN').fill('4321');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByLabel('Invitation code or guest name')).toBeVisible();
+
+  await context.setOffline(true);
+  await expect(page.getByRole('status').filter({ hasText: 'No connection' })).toBeVisible();
+  await page.getByLabel('Invitation code or guest name').fill(g.code);
+  await page.getByLabel('Invitation code or guest name').press('Enter');
+  const alert = page.getByRole('alert').filter({ hasText: 'Not checked in' });
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText(`The guest (${g.code}) is not checked in yet.`);
+
+  await context.setOffline(false);
+  await expect(page.getByRole('status').filter({ hasText: 'No connection' })).toHaveCount(0);
+  await alert.getByRole('button', { name: 'Try again' }).click();
+  await expect(page.getByText('Welcome')).toBeVisible();
+  await expect(alert).toHaveCount(0);
+});
+
+test('the printed gate list has everyone invited to the reception, A to Z by name, with code and table', async ({ page }) => {
+  const request = page.request;
+  const t = Date.now().toString(36);
+  const zed = await addGuest(request, { name: `Mr. Zed Gatelist ${t}`, phone: '08011110001', events: ['trad'], table: '7', driverCard: true });
+  const ada = await addGuest(request, { name: `Ada Gatelist ${t}`, phone: '08011110002', events: ['church', 'trad'] });
+  await addGuest(request, { name: `Church Only Gatelist ${t}`, phone: '08011110003', events: ['church'] });
+  const no = await addGuest(request, { name: `Declined Gatelist ${t}`, phone: '08011110004', events: ['trad'] });
+  await request.post(`${PUBLIC}/api/admin/guests/${no.id}/rsvp`, { data: { rsvp: 'no' } });
+  await request.post(`${PUBLIC}/api/admin/guests/${ada.id}/rsvp`, { data: { rsvp: 'yes' } });
+
+  await page.goto(`${PUBLIC}/admin`);
+  await page.getByRole('link', { name: 'Gate list' }).click();
+  await expect(page.getByRole('heading', { name: /Gate list · Traditional Wedding & Reception/ })).toBeVisible();
+  const list = page.getByRole('table', { name: 'Gate list' });
+  const mine = list.getByRole('row').filter({ hasText: `Gatelist ${t}` });
+  await expect(mine).toHaveCount(2);
+  await expect(mine.nth(0)).toContainText(`Ada Gatelist ${t}`);
+  await expect(mine.nth(0)).toContainText(ada.code);
+  await expect(mine.nth(0)).toContainText('Attending');
+  // "Mr." is skipped, so Zed is filed under Z, after Ada.
+  await expect(mine.nth(1)).toContainText(zed.code);
+  await expect(mine.nth(1)).toContainText('7');
+  await expect(mine.nth(1)).toContainText('Driver card');
+  await expect(mine.nth(1)).toContainText('No reply');
+
+  await page.getByRole('radio', { name: 'Attending only' }).click();
+  await expect(mine).toHaveCount(1);
+  await expect(mine).toContainText(`Ada Gatelist ${t}`);
+});
+
+test('failed WhatsApp sends can be filtered, are grouped by reason with what to do, and retried', async ({ page }) => {
+  const t = Date.now().toString(36);
+  const g = await addGuest(page.request, { name: `Wrong Number ${t}`, phone: '123', events: ['trad'], channel: 'whatsapp' });
+  const r = await page.request.post(`${PUBLIC}/api/admin/guests/${g.id}/whatsapp?kind=trad`);
+  expect(r.status()).toBe(400);
+
+  await page.goto(`${PUBLIC}/admin`);
+  await page.getByRole('button', { name: /^WhatsApp failed/ }).click();
+  await expect(page.getByRole('button', { name: new RegExp(`^Wrong Number ${t}.*WhatsApp failed: No valid WhatsApp number`) })).toBeVisible();
+  const why = page.getByRole('region', { name: 'Why WhatsApp sends failed' });
+  const group = why.getByRole('listitem').filter({ hasText: 'No valid WhatsApp number' });
+  await expect(group).toContainText('Fix it in their guest record');
+  await group.getByRole('button', { name: /^Retry \d+ failed: No valid WhatsApp number/ }).click();
+  await expect(page.getByRole('dialog')).toContainText('on WhatsApp');
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+
+  // Off again, the full list is back.
+  await page.getByRole('button', { name: /^WhatsApp failed/ }).click();
+  await expect(why).toHaveCount(0);
+});
+
 test('sending on WhatsApp from a phone opens the guest’s chat with the message, then shares the card', async ({ page, request }) => {
   const g = await addGuest(request, { name: 'Funke Bello', phone: '08066666666' });
   // Without WhatsApp Business, the desk opens WhatsApp itself. Stand-ins for WhatsApp and the share sheet record what would be sent.
